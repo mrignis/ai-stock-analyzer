@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\chelb\\\\OneDrive\\\\Рабочий стол\\\\stock-extension\" -Recurse -Force)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}

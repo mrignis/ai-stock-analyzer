@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8"/>
+<title>AI Stock Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0f11;--surface:#16181c;--surface2:#1e2126;--surface3:#252830;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e8eaed;--muted:#7a7f8a;--dim:#4a4f5a;
+  --green:#4ade80;--green-dim:rgba(74,222,128,0.1);--green-border:rgba(74,222,128,0.25);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --yellow:#fbbf24;--yellow-dim:rgba(251,191,36,0.1);
+  --blue:#60a5fa;--blue-dim:rgba(96,165,250,0.1);
+  --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+  --r:8px;--r-lg:12px;
+}
+body{width:440px;min-height:520px;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+.nav{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);gap:6px}
+.nav-logo{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:0.12em;flex:1}
+.nav-tabs{display:flex;gap:2px}
+.nav-tab{font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 8px;border-radius:20px;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s}
+.nav-tab.active{background:var(--green-dim);color:var(--green);border:1px solid var(--green-border)}
+.lang-toggle{font-size:10px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border2);color:var(--muted);border-radius:20px;padding:3px 8px;cursor:pointer}
+.panel{display:none;padding:14px}
+.panel.active{display:block}
+.search-row{display:flex;gap:6px;margin-bottom:10px}
+input[type=text]{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:0.08em;padding:0 10px;height:36px;outline:none;text-transform:uppercase;transition:border-color 0.15s}
+input[type=text]:focus{border-color:var(--green)}
+input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12px;color:var(--dim)}
+.btn-green{background:var(--green);color:#0a0f0a;border:none;border-radius:var(--r);font-family:var(--sans);font-size:12px;font-weight:600;padding:0 14px;height:36px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s}
+.btn-green:hover{opacity:0.85}
+.btn-full{width:100%;height:36px;font-size:13px;margin-top:4px}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--muted);border-radius:var(--r);font-family:var(--mono);font-size:11px;padding:0 10px;height:28px;cursor:pointer;transition:all 0.15s}
+.btn-outline:hover{border-color:var(--green);color:var(--green)}
+.quick-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.qp-label{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase}
+.qp{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s}
+.qp:hover{border-color:var(--green);color:var(--green);background:var(--green-dim)}
+.loading{text-align:center;padding:2rem 0;display:none}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin 0.7s linear infinite;margin-bottom:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading p{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.result{display:none}
+.price-box{display:none;align-items:center;flex-wrap:wrap;gap:6px;background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;border:1px solid var(--border2)}
+.result-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.ticker-big{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--green);letter-spacing:0.08em}
+.verdict-pill{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;letter-spacing:0.06em}
+.pill-green{background:var(--green-dim);color:var(--green)}
+.pill-yellow{background:var(--yellow-dim);color:var(--yellow)}
+.pill-red{background:var(--red-dim);color:var(--red)}
+.pill-blue{background:var(--blue-dim);color:var(--blue)}
+.spacer{flex:1}
+.add-watch-btn{font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:var(--r);border:1px solid var(--green-border);background:var(--green-dim);color:var(--green);cursor:pointer;transition:all 0.15s}
+.add-watch-btn.added{background:transparent;color:var(--muted);border-color:var(--border2)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.stat{background:var(--surface2);border-radius:var(--r);padding:8px 10px}
+.stat-lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.stat-val{font-size:12px;font-weight:500}
+.chart-wrap{background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:8px}
+.chart-title{font-family:var(--mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.block{background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:8px}
+.block-title{font-family:var(--mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.block-text{font-size:12px;line-height:1.6;color:var(--text)}
+.conclusion{border-radius:var(--r);padding:10px 12px;margin-bottom:10px}
+.conclusion .block-title{opacity:0.7}
+.disclaimer{font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;margin-top:6px}
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--muted)}
+.empty-icon{font-size:28px;margin-bottom:8px;opacity:0.4}
+.empty p{font-size:12px;line-height:1.6}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.section-title-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
+.watch-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:var(--r);padding:9px 12px;margin-bottom:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent}
+.watch-item:hover{background:var(--surface3);border-color:var(--border2)}
+.watch-ticker{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green);width:50px}
+.watch-info{flex:1}
+.watch-sector{font-size:11px;color:var(--muted)}
+.watch-remove{font-size:14px;color:var(--dim);background:none;border:none;cursor:pointer;padding:2px 4px;border-radius:4px;transition:color 0.15s}
+.watch-remove:hover{color:var(--red)}
+.hist-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r);cursor:pointer;transition:background 0.15s}
+.hist-item:hover{background:var(--surface2)}
+.hist-ticker{font-family:var(--mono);font-size:12px;color:var(--green);width:50px}
+.hist-time{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1}
+.clear-btn{font-size:10px;font-family:var(--mono);background:transparent;border:1px solid var(--border2);color:var(--dim);border-radius:var(--r);padding:3px 8px;cursor:pointer}
+.clear-btn:hover{border-color:var(--red);color:var(--red)}
+/* Settings */
+.setup-box{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.setup-box p{font-size:12px;color:var(--muted);line-height:1.6}
+.info-box{border-radius:var(--r);padding:10px 12px;margin-bottom:12px}
+.info-green{background:var(--green-dim);border:1px solid var(--green-border)}
+.info-yellow{background:var(--yellow-dim);border:1px solid rgba(251,191,36,0.25)}
+.info-blue{background:var(--blue-dim);border:1px solid rgba(96,165,250,0.2)}
+.info-box p{font-size:11px;line-height:1.6;font-family:var(--mono)}
+.info-green p{color:var(--green)}
+.info-yellow p{color:var(--yellow)}
+.info-blue p{color:var(--blue)}
+.divider{height:1px;background:var(--border);margin:14px 0}
+/* Alerts */
+.settings-label{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:block}
+
+/* ── Chat ─────────────────────────────────────────────────────────────────── */
+#panel-chat{display:none;flex-direction:column;height:490px;padding:10px 14px}
+#panel-chat.active{display:flex}
+.chat-ctx-bar{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:6px 10px;margin-bottom:8px;display:none;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.chat-ctx-bar .ctx-tick{color:var(--green);font-weight:500}
+.chat-ctx-clear{margin-left:auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px;line-height:1}
+.chat-ctx-clear:hover{color:var(--red)}
+.chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 0 8px 0;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.chat-messages::-webkit-scrollbar{width:4px}
+.chat-messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.chat-welcome{text-align:center;padding:2rem 1rem;color:var(--muted)}
+.chat-welcome-icon{font-size:28px;margin-bottom:8px;opacity:0.5}
+.chat-welcome p{font-size:12px;line-height:1.6}
+.chat-msg{max-width:88%;padding:8px 12px;border-radius:12px;font-size:12px;line-height:1.6;word-break:break-word}
+.chat-msg.user{align-self:flex-end;background:var(--green-dim);color:var(--green);border:1px solid var(--green-border);border-bottom-right-radius:3px}
+.chat-msg.ai{align-self:flex-start;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-bottom-left-radius:3px}
+.chat-msg.typing{color:var(--muted);font-style:italic}
+.chat-input-row{display:flex;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
+.chat-input-row input{text-transform:none!important;letter-spacing:0!important;font-size:12px}
+.chat-send-btn{padding:0 14px;min-width:44px;flex-shrink:0;font-size:15px}
+</style>
+</head>
+<body>
+<div class="nav">
+  <span class="nav-logo">📈 AI Stocks</span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-search">Пошук</button>
+    <button class="nav-tab" id="tab-watchlist">WL</button>
+    <button class="nav-tab" id="tab-history">Іст.</button>
+    <button class="nav-tab" id="tab-chat">💬</button>
+    <button class="nav-tab" id="tab-alerts">🔔</button>
+    <button class="nav-tab" id="tab-settings">⚙</button>
+  </div>
+  <button class="lang-toggle" id="lang-btn">EN</button>
+</div>
+
+<!-- SEARCH -->
+<div class="panel active" id="panel-search">
+  <div class="search-row">
+    <input type="text" id="ticker-input" maxlength="10" autocomplete="off" placeholder="TSLA, AAPL..."/>
+    <button class="btn-green" id="analyze-btn">Аналіз</button>
+    <button id="stop-btn" style="display:none;background:var(--red-dim);color:var(--red);border:1px solid rgba(248,113,113,0.3);border-radius:var(--r);font-family:var(--sans);font-size:12px;font-weight:600;padding:0 14px;height:36px;cursor:pointer;white-space:nowrap">✕ Стоп</button>
+  </div>
+  <div class="quick-row">
+    <span class="qp-label" id="lbl-popular">Популярні:</span>
+    <button class="qp" data-ticker="TSLA">TSLA</button>
+    <button class="qp" data-ticker="AAPL">AAPL</button>
+    <button class="qp" data-ticker="NVDA">NVDA</button>
+    <button class="qp" data-ticker="AMZN">AMZN</button>
+    <button class="qp" data-ticker="BYND">BYND</button>
+    <button class="qp" data-ticker="META">META</button>
+  </div>
+
+  <div class="empty" id="empty-state">
+    <div class="empty-icon">📊</div>
+    <p id="empty-text">Введи тікер і отримай AI-аналіз</p>
+  </div>
+  <div class="loading" id="loading-state">
+    <div class="spinner"></div>
+    <p id="loading-msg">Аналізую...</p>
+  </div>
+  <div class="result" id="result">
+    <div class="price-box" id="price-box"></div>
+    <div class="result-top">
+      <span class="ticker-big" id="r-ticker"></span>
+      <span class="verdict-pill" id="r-verdict"></span>
+      <div class="spacer"></div>
+      <button class="add-watch-btn" id="watch-btn">+ Watchlist</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-lbl" id="lbl-sector">Сектор</div><div class="stat-val" id="r-sector"></div></div>
+      <div class="stat"><div class="stat-lbl" id="lbl-risk">Ризик</div><div class="stat-val" id="r-risk"></div></div>
+      <div class="stat"><div class="stat-lbl" id="lbl-trend">Тренд</div><div class="stat-val" id="r-trend"></div></div>
+      <div class="stat"><div class="stat-lbl" id="lbl-for">Для кого</div><div class="stat-val" id="r-for"></div></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title"><span id="lbl-chart">Тренд (30д)</span><span id="chart-change"></span></div>
+      <canvas id="trend-chart" height="80"></canvas>
+    </div>
+    <div class="block"><div class="block-title" id="lbl-what">Що робить компанія</div><div class="block-text" id="r-what"></div></div>
+    <div class="block"><div class="block-title" id="lbl-risks">Головні ризики</div><div class="block-text" id="r-risks"></div></div>
+    <div class="block" style="background:var(--green-dim);border:1px solid var(--green-border)">
+      <div class="block-title" id="lbl-forecast" style="color:var(--green)">AI Прогноз</div>
+      <div class="block-text" id="r-forecast" style="color:var(--green)"></div>
+    </div>
+    <div class="conclusion" id="r-conclusion-box">
+      <div class="block-title" id="lbl-conclusion">Висновок AI</div>
+      <div class="block-text" id="r-conclusion"></div>
+    </div>
+    <p class="disclaimer" id="r-disclaimer">Не є фінансовою порадою.</p>
+  </div>
+</div>
+
+<!-- WATCHLIST -->
+<div class="panel" id="panel-watchlist">
+  <div class="section-head">
+    <span class="section-title-lbl" id="lbl-watchlist-title">Відстежуються</span>
+    <button class="btn-outline" id="btn-refresh">↻</button>
+  </div>
+  <div id="watchlist-content"></div>
+</div>
+
+<!-- HISTORY -->
+<div class="panel" id="panel-history">
+  <div class="section-head">
+    <span class="section-title-lbl" id="lbl-history-title">Історія пошуків</span>
+    <button class="clear-btn" id="btn-clear">Очистити</button>
+  </div>
+  <div id="history-content"></div>
+</div>
+
+<!-- CHAT -->
+<div class="panel" id="panel-chat">
+  <div class="chat-ctx-bar" id="chat-ctx-bar">
+    <span>💬</span>
+    <span id="lbl-chat-ctx">Контекст:</span>
+    <span class="ctx-tick" id="chat-ctx-ticker"></span>
+    <button class="chat-ctx-clear" id="chat-ctx-clear">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-welcome" id="chat-welcome">
+      <div class="chat-welcome-icon">🤖</div>
+      <p id="lbl-chat-welcome">Привіт! Запитай мене про будь-яку акцію або ринок. Після аналізу — отримую контекст автоматично.</p>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="Запитай про TSLA, ринок..."/>
+    <button class="btn-green chat-send-btn" id="chat-send-btn">→</button>
+  </div>
+</div>
+
+<!-- ALERTS -->
+<div class="panel" id="panel-alerts">
+  <div class="section-head">
+    <span class="section-title-lbl" id="lbl-alerts-title">Алерти цін</span>
+    <button class="btn-outline" id="btn-check-now">↻ Перевірити</button>
+  </div>
+  <div class="info-box info-blue" style="margin-bottom:12px">
+    <p id="alerts-info">Отримуй сповіщення коли акції з Watchlist змінюються більше ніж на заданий %.</p>
+  </div>
+  <div class="setup-box">
+    <p id="threshold-label">Поріг сповіщення (% зміни):</p>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;margin-top:8px">
+      <input type="range" id="threshold-slider" min="1" max="10" value="3" style="flex:1;accent-color:var(--green)">
+      <span id="threshold-value" style="font-family:var(--mono);font-size:14px;color:var(--green);width:40px;text-align:center">3%</span>
+    </div>
+    <button class="btn-green btn-full" id="btn-save-threshold">Зберегти</button>
+  </div>
+  <div id="alert-prices-list"></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="panel" id="panel-settings">
+  <div class="info-box info-green" style="margin-bottom:16px">
+    <p>✓ Безкоштовно — ключі не потрібні. Аналіз на базі Gemini AI + реальні дані Finnhub.</p>
+  </div>
+
+  <div class="setup-box">
+    <p id="settings-how-it-works" style="margin-bottom:0">Розширення використовує наш хмарний сервер для AI аналізу. Твої дані не зберігаються.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="info-box info-blue">
+    <p id="settings-version">AI Stock Analyzer v2.0 · Gemini AI · Finnhub</p>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
