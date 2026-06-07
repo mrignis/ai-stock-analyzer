@@ -19,6 +19,22 @@ var convListVisible = false;
 function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history','conversations','currentConvId'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
 
+// ── Cache ─────────────────────────────────────────────────────────────────────
+var CACHE_MARKET_TTL  = 5  * 60 * 1000; // 5 хв
+var CACHE_ANALYZE_TTL = 15 * 60 * 1000; // 15 хв
+var CACHE_PRICE_TTL   = 2  * 60 * 1000; // 2 хв
+
+function cacheGet(key, ttl, cb) {
+  chrome.storage.local.get('c_' + key, function(s) {
+    var e = s['c_' + key];
+    cb(e && (Date.now() - e.t) < ttl ? e.d : null);
+  });
+}
+function cacheSet(key, data) {
+  var o = {}; o['c_' + key] = { d: data, t: Date.now() };
+  chrome.storage.local.set(o);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   loadAll(function(s) {
@@ -176,10 +192,17 @@ function showPanel(id) {
 
 // ── Market Overview ───────────────────────────────────────────────────────────
 function fetchMarketData() {
-  fetch(WORKER_URL + '/market')
-    .then(function(r) { return r.json(); })
-    .then(function(data) { renderMarketCards(data); })
-    .catch(function() {});
+  // Show cached data instantly, then refresh in background
+  cacheGet('market', CACHE_MARKET_TTL, function(cached) {
+    if (cached) renderMarketCards(cached);
+    fetch(WORKER_URL + '/market')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        cacheSet('market', data);
+        renderMarketCards(data);
+      })
+      .catch(function() {});
+  });
 }
 
 var CARD_TICKERS = { SP500: 'SPY', NASDAQ: 'QQQ', BTC: 'BTC', GOLD: 'GLD' };
@@ -250,23 +273,27 @@ function renderHomeWatchlist() {
     });
   });
 
-  // Fetch live prices
+  // Fetch live prices (with cache)
   shown.forEach(function(w) {
-    fetch(WORKER_URL + '/price?ticker=' + w.ticker)
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d.c || d.c === 0) return;
-        var priceEl = document.getElementById('hwp-' + w.ticker);
-        var pctEl = document.getElementById('hwpc-' + w.ticker);
-        if (!priceEl) return;
-        var pct = ((d.c - d.pc) / d.pc * 100);
-        var up = pct >= 0;
-        priceEl.textContent = '$' + d.c.toFixed(2);
-        priceEl.style.color = 'var(--text)';
-        pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
-        pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
-      })
-      .catch(function() {});
+    function applyPrice(d) {
+      if (!d || !d.c || d.c === 0) return;
+      var priceEl = document.getElementById('hwp-' + w.ticker);
+      var pctEl   = document.getElementById('hwpc-' + w.ticker);
+      if (!priceEl || !pctEl) return;
+      var pct = ((d.c - d.pc) / d.pc * 100);
+      var up = pct >= 0;
+      priceEl.textContent = '$' + formatPrice(d.c);
+      priceEl.style.color = 'var(--text)';
+      pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+      pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+    }
+    cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
+      if (cached) applyPrice(cached);
+      fetch(WORKER_URL + '/price?ticker=' + w.ticker)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyPrice(d); } })
+        .catch(function() {});
+    });
   });
 }
 
@@ -290,77 +317,96 @@ function runAnalysis() {
   if (currentAbort) { currentAbort.abort(); }
   currentAbort = new AbortController();
   currentTicker = raw; currentData = null;
+
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('result').style.display = 'none';
-  document.getElementById('loading-state').style.display = 'block';
-  document.getElementById('loading-msg').textContent = (lang === 'ua' ? 'Аналізую ' : 'Analyzing ') + raw + '...';
   document.getElementById('price-box').style.display = 'none';
   document.getElementById('analyze-btn').style.display = 'none';
   document.getElementById('stop-btn').style.display = 'block';
 
-  var signal = currentAbort.signal;
+  // Check cache first — show result instantly if available
+  cacheGet('analyze_' + raw, CACHE_ANALYZE_TTL, function(cached) {
+    if (cached) {
+      document.getElementById('loading-state').style.display = 'none';
+      // Show cached price, then fetch fresh in background
+      showCachedPrice(raw, cached);
+      finish(raw, normalizeAI(cached));
+      // Silent background price refresh
+      fetchFreshPrice(raw);
+      return;
+    }
 
-  fetch(WORKER_URL + '/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker: raw, lang: lang }),
-    signal: signal,
-  })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
-      // Fetch fresh price separately for accurate display (esp. crypto)
-      fetch(WORKER_URL + '/price?ticker=' + raw)
-        .then(function(r) { return r.json(); })
-        .then(function(pd) {
-          if (pd.c && pd.c > 0) {
-            var ch = pd.c - pd.pc;
-            var p = (ch / pd.pc) * 100;
-            showPrice({
-              price: formatPrice(pd.c),
-              change: (ch >= 0 ? '+' : '') + formatChange(ch),
-              pct: (p >= 0 ? '+' : '') + p.toFixed(2),
-              currency: 'USD',
-            });
-          } else if (data._quote && data._quote.c) {
-            var q = data._quote;
-            var change = q.c - q.pc;
-            var pct = (change / q.pc) * 100;
-            showPrice({
-              price: formatPrice(q.c),
-              change: (change >= 0 ? '+' : '') + formatChange(change),
-              pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
-              currency: 'USD',
-            });
-          }
-        })
-        .catch(function() {
-          if (data._quote && data._quote.c) {
-            var q = data._quote;
-            var change = q.c - q.pc;
-            var pct = (change / q.pc) * 100;
-            showPrice({
-              price: formatPrice(q.c),
-              change: (change >= 0 ? '+' : '') + formatChange(change),
-              pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
-              currency: 'USD',
-            });
-          }
-        });
-      finish(raw, normalizeAI(data));
+    // No cache — show loading skeleton and fetch
+    document.getElementById('loading-state').style.display = 'block';
+    document.getElementById('loading-msg').textContent = (lang === 'ua' ? 'Аналізую ' : 'Analyzing ') + raw + '...';
+
+    var signal = currentAbort.signal;
+    fetch(WORKER_URL + '/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker: raw, lang: lang }),
+      signal: signal,
     })
-    .catch(function(e) {
-      if (e.name === 'AbortError') return;
-      var msg = e.message || '';
-      var retryMatch = msg.match(/retry in ([\d.]+)s/i);
-      if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted')) {
-        var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
-        msg = lang === 'ua'
-          ? '⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.'
-          : '⏳ Rate limit. Try again in ' + sec + ' sec.';
-      }
-      showError(msg || (lang === 'ua' ? 'Помилка з\'єднання' : 'Connection error'));
-    });
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
+        cacheSet('analyze_' + raw, data); // Save to cache
+        fetchFreshPrice(raw, data);
+        finish(raw, normalizeAI(data));
+      })
+      .catch(function(e) {
+        if (e.name === 'AbortError') return;
+        var msg = e.message || '';
+        var retryMatch = msg.match(/retry in ([\d.]+)s/i);
+        if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted') || msg.toLowerCase().includes('rate')) {
+          var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
+          msg = lang === 'ua'
+            ? '⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.'
+            : '⏳ Rate limit. Try again in ' + sec + ' sec.';
+        }
+        showError(msg || (lang === 'ua' ? 'Помилка з\'єднання' : 'Connection error'));
+      });
+  });
+}
+
+function fetchFreshPrice(raw, fallbackData) {
+  cacheGet('price_' + raw, CACHE_PRICE_TTL, function(cachedPrice) {
+    if (cachedPrice) {
+      renderPrice(cachedPrice);
+      return;
+    }
+    fetch(WORKER_URL + '/price?ticker=' + raw)
+      .then(function(r) { return r.json(); })
+      .then(function(pd) {
+        if (pd.c && pd.c > 0) {
+          cacheSet('price_' + raw, pd);
+          renderPrice(pd);
+        } else if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
+          renderPrice(fallbackData._quote);
+        }
+      })
+      .catch(function() {
+        if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
+          renderPrice(fallbackData._quote);
+        }
+      });
+  });
+}
+
+function showCachedPrice(raw, cached) {
+  if (cached._quote && cached._quote.c) renderPrice(cached._quote);
+}
+
+function renderPrice(q) {
+  if (!q || !q.c) return;
+  var change = q.c - q.pc;
+  var pct = (change / q.pc) * 100;
+  showPrice({
+    price: formatPrice(q.c),
+    change: (change >= 0 ? '+' : '') + formatChange(change),
+    pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
+    currency: 'USD',
+  });
 }
 
 function showPrice(info) {
@@ -657,23 +703,27 @@ function renderWatchlist() {
     });
   }
 
-  // Fetch live prices for all tickers
+  // Fetch live prices (with cache)
   watchlist.forEach(function(w) {
-    fetch(WORKER_URL + '/price?ticker=' + w.ticker)
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d.c || d.c === 0) return;
-        var priceEl = document.getElementById('wp-' + w.ticker);
-        var pctEl = document.getElementById('wpc-' + w.ticker);
-        if (!priceEl) return;
-        var pct = ((d.c - d.pc) / d.pc * 100);
-        var up = pct >= 0;
-        priceEl.textContent = '$' + d.c.toFixed(2);
-        priceEl.style.color = 'var(--text)';
-        pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
-        pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
-      })
-      .catch(function() {});
+    function applyWPrice(d) {
+      if (!d || !d.c || d.c === 0) return;
+      var priceEl = document.getElementById('wp-' + w.ticker);
+      var pctEl   = document.getElementById('wpc-' + w.ticker);
+      if (!priceEl || !pctEl) return;
+      var pct = ((d.c - d.pc) / d.pc * 100);
+      var up = pct >= 0;
+      priceEl.textContent = '$' + formatPrice(d.c);
+      priceEl.style.color = 'var(--text)';
+      pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+      pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+    }
+    cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
+      if (cached) applyWPrice(cached);
+      fetch(WORKER_URL + '/price?ticker=' + w.ticker)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyWPrice(d); } })
+        .catch(function() {});
+    });
   });
 }
 
