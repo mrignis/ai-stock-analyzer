@@ -39,10 +39,19 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .qp-label{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;color:var(--muted);text-transform:uppercase}
 .qp{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s}
 .qp:hover{border-color:var(--green);color:var(--green);background:var(--green-dim)}
-.loading{text-align:center;padding:2rem 0;display:none}
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin 0.7s linear infinite;margin-bottom:8px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading p{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.loading{display:none;padding:4px 0}
+/* Skeleton loader */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.sk{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite;border-radius:6px}
+.sk-price{height:44px;margin-bottom:10px}
+.sk-row{display:flex;gap:8px;margin-bottom:10px}
+.sk-tag{height:26px;flex:1;border-radius:20px}
+.sk-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.sk-stat{height:52px;border-radius:var(--r)}
+.sk-chart{height:108px;margin-bottom:8px;border-radius:var(--r)}
+.sk-block{height:72px;margin-bottom:8px;border-radius:var(--r)}
+.sk-block.sm{height:52px}
+.loading p{font-size:12px;color:var(--muted);font-family:var(--mono);text-align:center;margin-top:8px}
 .result{display:none}
 .price-box{display:none;align-items:center;flex-wrap:wrap;gap:6px;background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;border:1px solid var(--border2)}
 .result-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
@@ -74,7 +83,9 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .section-title-lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
 .watch-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:var(--r);padding:9px 12px;margin-bottom:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent}
 .watch-item:hover{background:var(--surface3);border-color:var(--border2)}
-.watch-ticker{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green);width:50px}
+.watch-ticker{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green);width:50px;flex-shrink:0}
+.watch-price{font-family:var(--mono);font-size:12px;color:var(--text);flex-shrink:0}
+.watch-pct{font-family:var(--mono);font-size:11px;flex-shrink:0}
 .watch-info{flex:1}
 .watch-sector{font-size:11px;color:var(--muted)}
 .watch-remove{font-size:14px;color:var(--dim);background:none;border:none;cursor:pointer;padding:2px 4px;border-radius:4px;transition:color 0.15s}
@@ -117,14 +128,45 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .chat-msg.user{align-self:flex-end;background:var(--green-dim);color:var(--green);border:1px solid var(--green-border);border-bottom-right-radius:3px}
 .chat-msg.ai{align-self:flex-start;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-bottom-left-radius:3px}
 .chat-msg.typing{color:var(--muted);font-style:italic}
+.chat-msg-wrap{position:relative;max-width:88%;align-self:flex-start}
+.chat-msg-wrap .chat-msg{max-width:100%}
+.chat-copy-btn{position:absolute;top:4px;right:4px;background:var(--surface3);border:1px solid var(--border2);color:var(--muted);border-radius:4px;font-size:10px;padding:2px 5px;cursor:pointer;opacity:0;transition:opacity 0.15s;line-height:1.4}
+.chat-msg-wrap:hover .chat-copy-btn{opacity:1}
+.chat-copy-btn:hover{color:var(--green);border-color:var(--green-border)}
+/* Market cards */
+.mcard{background:var(--surface2);border-radius:var(--r);padding:8px 10px;border:1px solid var(--border);transition:border-color 0.15s;cursor:default}
+.mcard:hover{border-color:var(--border2)}
+.mcard-label{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard-price{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text);margin-bottom:2px}
+.mcard-pct{font-family:var(--mono);font-size:10px;font-weight:500}
+/* Home watchlist */
+.hwl-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r);background:var(--surface2);margin-bottom:4px;cursor:pointer;border:1px solid var(--border);transition:border-color 0.15s}
+.hwl-item:hover{border-color:var(--border2)}
+.hwl-ticker{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--green);width:48px;flex-shrink:0}
+.hwl-price{font-family:var(--mono);font-size:12px;color:var(--text);flex:1}
+.hwl-pct{font-family:var(--mono);font-size:11px;flex-shrink:0}
+.chat-toolbar{display:flex;gap:5px;margin-bottom:6px;align-items:center}
+.chat-toolbar-title{font-family:var(--mono);font-size:10px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-input-row{display:flex;gap:6px;padding-top:8px;border-top:1px solid var(--border)}
 .chat-input-row input{text-transform:none!important;letter-spacing:0!important;font-size:12px}
 .chat-send-btn{padding:0 14px;min-width:44px;flex-shrink:0;font-size:15px}
+/* Conversations list */
+.conv-list{flex:1;overflow-y:auto;display:none;flex-direction:column;gap:5px;padding:2px 0}
+.conv-list.active{display:flex}
+.conv-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;cursor:pointer;transition:all 0.15s}
+.conv-item:hover{border-color:var(--green-border);background:var(--surface3)}
+.conv-item.current{border-color:var(--green-border);background:var(--green-dim)}
+.conv-info{flex:1;overflow:hidden}
+.conv-title{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-date{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+.conv-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:0 3px;flex-shrink:0}
+.conv-del:hover{color:var(--red)}
+.conv-empty{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
 <div class="nav">
-  <span class="nav-logo">📈 AI Stocks</span>
+  <span class="nav-logo" id="nav-logo" style="cursor:pointer">📈 AI Stocks</span>
   <div class="nav-tabs">
     <button class="nav-tab active" id="tab-search">Пошук</button>
     <button class="nav-tab" id="tab-watchlist">WL</button>
@@ -143,23 +185,48 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
     <button class="btn-green" id="analyze-btn">Аналіз</button>
     <button id="stop-btn" style="display:none;background:var(--red-dim);color:var(--red);border:1px solid rgba(248,113,113,0.3);border-radius:var(--r);font-family:var(--sans);font-size:12px;font-weight:600;padding:0 14px;height:36px;cursor:pointer;white-space:nowrap">✕ Стоп</button>
   </div>
-  <div class="quick-row">
-    <span class="qp-label" id="lbl-popular">Популярні:</span>
-    <button class="qp" data-ticker="TSLA">TSLA</button>
-    <button class="qp" data-ticker="AAPL">AAPL</button>
-    <button class="qp" data-ticker="NVDA">NVDA</button>
-    <button class="qp" data-ticker="AMZN">AMZN</button>
-    <button class="qp" data-ticker="BYND">BYND</button>
-    <button class="qp" data-ticker="META">META</button>
-  </div>
 
-  <div class="empty" id="empty-state">
-    <div class="empty-icon">📊</div>
-    <p id="empty-text">Введи тікер і отримай AI-аналіз</p>
+  <div id="empty-state">
+    <!-- Market Overview -->
+    <div id="market-overview" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)" id="lbl-market">Ринок</span>
+        <span id="market-time" style="font-family:var(--mono);font-size:9px;color:var(--dim)"></span>
+      </div>
+      <div id="market-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">
+        <div class="mcard sk" style="height:54px"></div>
+        <div class="mcard sk" style="height:54px"></div>
+        <div class="mcard sk" style="height:54px"></div>
+        <div class="mcard sk" style="height:54px"></div>
+      </div>
+    </div>
+
+    <!-- Mini Watchlist -->
+    <div id="home-watchlist" style="margin-bottom:12px;display:none">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px" id="lbl-home-wl">Watchlist</div>
+      <div id="home-wl-items"></div>
+    </div>
+
+    <!-- Popular -->
+    <div class="quick-row">
+      <span class="qp-label" id="lbl-popular">Популярні:</span>
+      <button class="qp" data-ticker="TSLA">TSLA</button>
+      <button class="qp" data-ticker="AAPL">AAPL</button>
+      <button class="qp" data-ticker="NVDA">NVDA</button>
+      <button class="qp" data-ticker="AMZN">AMZN</button>
+      <button class="qp" data-ticker="BTC">BTC</button>
+      <button class="qp" data-ticker="META">META</button>
+    </div>
   </div>
   <div class="loading" id="loading-state">
-    <div class="spinner"></div>
-    <p id="loading-msg">Аналізую...</p>
+    <div class="sk sk-price"></div>
+    <div class="sk-row"><div class="sk sk-tag"></div><div class="sk sk-tag"></div><div class="sk sk-tag"></div></div>
+    <div class="sk-grid"><div class="sk sk-stat"></div><div class="sk sk-stat"></div><div class="sk sk-stat"></div><div class="sk sk-stat"></div></div>
+    <div class="sk sk-chart"></div>
+    <div class="sk sk-block"></div>
+    <div class="sk sk-block"></div>
+    <div class="sk sk-block sm"></div>
+    <p id="loading-msg" style="margin-top:10px">Аналізую...</p>
   </div>
   <div class="result" id="result">
     <div class="price-box" id="price-box"></div>
@@ -213,12 +280,20 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 
 <!-- CHAT -->
 <div class="panel" id="panel-chat">
+  <div class="chat-toolbar">
+    <span class="chat-toolbar-title" id="chat-conv-title">Новий діалог</span>
+    <button class="btn-outline" id="btn-conv-list" title="Діалоги" style="padding:0 8px;font-size:12px">☰</button>
+    <button class="btn-outline" id="btn-new-chat" title="Новий діалог" style="padding:0 8px;font-size:13px">✏️</button>
+  </div>
   <div class="chat-ctx-bar" id="chat-ctx-bar">
     <span>💬</span>
     <span id="lbl-chat-ctx">Контекст:</span>
     <span class="ctx-tick" id="chat-ctx-ticker"></span>
     <button class="chat-ctx-clear" id="chat-ctx-clear">✕</button>
   </div>
+  <!-- Conversations list (hidden by default) -->
+  <div class="conv-list" id="conv-list"></div>
+  <!-- Chat messages -->
   <div class="chat-messages" id="chat-messages">
     <div class="chat-welcome" id="chat-welcome">
       <div class="chat-welcome-icon">🤖</div>
@@ -254,7 +329,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 <!-- SETTINGS -->
 <div class="panel" id="panel-settings">
   <div class="info-box info-green" style="margin-bottom:16px">
-    <p>✓ Безкоштовно — ключі не потрібні. Аналіз на базі Gemini AI + реальні дані Finnhub.</p>
+    <p id="settings-free-note">✓ Безкоштовно — ключі не потрібні. Аналіз на базі Groq Llama 3.3 + реальні дані Finnhub.</p>
   </div>
 
   <div class="setup-box">
@@ -264,7 +339,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
   <div class="divider"></div>
 
   <div class="info-box info-blue">
-    <p id="settings-version">AI Stock Analyzer v2.0 · Gemini AI · Finnhub</p>
+    <p id="settings-version">AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub</p>
   </div>
 </div>
 

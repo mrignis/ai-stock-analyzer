@@ -153,6 +153,9 @@ function applyLang() {
   document.getElementById('settings-how-it-works').textContent = ua
     ? 'Розширення використовує наш хмарний сервер для AI аналізу. Твої дані не зберігаються.'
     : 'The extension uses our cloud server for AI analysis. Your data is not stored.';
+  document.getElementById('settings-free-note').textContent = ua
+    ? '✓ Безкоштовно — ключі не потрібні. Аналіз на базі Groq Llama 3.3 + реальні дані Finnhub.'
+    : '✓ Free — no API keys needed. Powered by Groq Llama 3.3 + real-time Finnhub data.';
   var stopBtn = document.getElementById('stop-btn');
   if (stopBtn) stopBtn.textContent = ua ? '✕ Стоп' : '✕ Stop';
 }
