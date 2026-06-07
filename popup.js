@@ -275,7 +275,8 @@ function stopAnalysis() {
   currentTicker = ''; currentData = null;
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('empty-state').style.display = 'block';
-  document.getElementById('empty-text').textContent = lang === 'ua' ? 'Пошук скасовано.' : 'Search cancelled.';
+  document.getElementById('price-box').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
   document.getElementById('stop-btn').style.display = 'none';
   document.getElementById('analyze-btn').style.display = 'block';
 }
@@ -526,7 +527,18 @@ function showError(msg) {
   document.getElementById('analyze-btn').style.display = 'block';
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('empty-state').style.display = 'block';
-  document.getElementById('empty-text').textContent = '⚠ ' + msg;
+  // Show inline error (empty-text was removed in redesign)
+  var errEl = document.getElementById('inline-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'inline-error';
+    errEl.style.cssText = 'background:var(--red-dim);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--red)';
+    var emptyState = document.getElementById('empty-state');
+    emptyState.insertBefore(errEl, emptyState.firstChild);
+  }
+  errEl.textContent = '⚠ ' + msg;
+  errEl.style.display = 'block';
+  setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 6000);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
