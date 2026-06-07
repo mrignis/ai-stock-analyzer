@@ -21,6 +21,15 @@ const CRYPTO_MAP = {
   'LINK': 'BINANCE:LINKUSDT', 'UNI': 'BINANCE:UNIUSDT',
 };
 
+// Full name → ticker normalization
+const CRYPTO_NAMES = {
+  'BITCOIN': 'BTC', 'ETHEREUM': 'ETH', 'SOLANA': 'SOL',
+  'CARDANO': 'ADA', 'DOGECOIN': 'DOGE', 'BINANCECOIN': 'BNB',
+  'RIPPLE': 'XRP', 'POLKADOT': 'DOT', 'AVALANCHE': 'AVAX',
+  'POLYGON': 'MATIC', 'CHAINLINK': 'LINK', 'UNISWAP': 'UNI',
+  'SHIBA': 'SHIB', 'LITECOIN': 'LTC', 'TRON': 'TRX',
+};
+
 async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
@@ -101,8 +110,9 @@ async function handleMarket(env) {
 // ── /price?ticker=TSLA ────────────────────────────────────────────────────────
 async function handlePrice(request, env) {
   const url = new URL(request.url);
-  const ticker = (url.searchParams.get('ticker') || '').toUpperCase();
-  if (!ticker) return json({ error: 'Missing ticker' }, 400);
+  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
+  if (!raw) return json({ error: 'Missing ticker' }, 400);
+  const ticker = CRYPTO_NAMES[raw] || raw;
   const sym = CRYPTO_MAP[ticker] || ticker;
   const res = await fetch(
     `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
@@ -116,7 +126,8 @@ async function handleAnalyze(request, env) {
   const { ticker, lang } = await request.json();
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
-  const t = ticker.toUpperCase();
+  const raw = ticker.toUpperCase();
+  const t = CRYPTO_NAMES[raw] || raw; // normalize full name → ticker
   const isCrypto = !!CRYPTO_MAP[t];
   const finnhubSym = CRYPTO_MAP[t] || t;
   const today = getToday();
@@ -229,6 +240,8 @@ async function handleChat(request, env) {
 
   const system = [
     'You are a helpful stock market and finance assistant with access to live market data.',
+    `Today is ${getToday()}.`,
+    'Your training data has a cutoff — always prioritize the live market data provided below over your training knowledge. Never give prices or news from your training as if they are current.',
     context ? `Current analysis context: ${context}` : '',
     liveData,
     ua ? 'Always respond in Ukrainian language.' : 'Respond in English.',
