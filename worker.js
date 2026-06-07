@@ -12,6 +12,15 @@ const CORS = {
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
+const CRYPTO_MAP = {
+  'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
+  'SOL': 'BINANCE:SOLUSDT', 'BNB': 'BINANCE:BNBUSDT',
+  'XRP': 'BINANCE:XRPUSDT', 'ADA': 'BINANCE:ADAUSDT',
+  'DOGE': 'BINANCE:DOGEUSDT', 'DOT': 'BINANCE:DOTUSDT',
+  'AVAX': 'BINANCE:AVAXUSDT', 'MATIC': 'BINANCE:MATICUSDT',
+  'LINK': 'BINANCE:LINKUSDT', 'UNI': 'BINANCE:UNIUSDT',
+};
+
 async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
@@ -45,6 +54,9 @@ export default {
       if (url.pathname === '/test' && request.method === 'GET') {
         return json({ ok: true, time: Date.now(), model: GROQ_MODEL });
       }
+      if (url.pathname === '/market' && request.method === 'GET') {
+        return await handleMarket(env);
+      }
       if (url.pathname === '/price' && request.method === 'GET') {
         return await handlePrice(request, env);
       }
@@ -61,14 +73,39 @@ export default {
   },
 };
 
+// ── /market ───────────────────────────────────────────────────────────────────
+async function handleMarket(env) {
+  const symbols = [
+    { key: 'SP500', sym: 'SPY',              label: 'S&P 500' },
+    { key: 'NASDAQ',sym: 'QQQ',              label: 'NASDAQ'  },
+    { key: 'BTC',   sym: 'BINANCE:BTCUSDT',  label: 'Bitcoin' },
+    { key: 'GOLD',  sym: 'GLD',               label: 'Gold'    },
+  ];
+  const results = await Promise.allSettled(
+    symbols.map(s =>
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(s.sym)}&token=${env.FINNHUB_KEY}`)
+        .then(r => r.json())
+        .then(d => ({ ...s, c: d.c, pc: d.pc }))
+    )
+  );
+  const data = {};
+  results.forEach(r => {
+    if (r.status === 'fulfilled' && r.value.c > 0) {
+      const { key, label, c, pc } = r.value;
+      data[key] = { label, c, pc, pct: ((c - pc) / pc * 100) };
+    }
+  });
+  return json(data);
+}
+
 // ── /price?ticker=TSLA ────────────────────────────────────────────────────────
 async function handlePrice(request, env) {
   const url = new URL(request.url);
   const ticker = (url.searchParams.get('ticker') || '').toUpperCase();
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
-
+  const sym = CRYPTO_MAP[ticker] || ticker;
   const res = await fetch(
-    `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${env.FINNHUB_KEY}`
+    `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
   );
   const data = await res.json();
   return json(data);
@@ -80,14 +117,22 @@ async function handleAnalyze(request, env) {
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
   const t = ticker.toUpperCase();
+  const isCrypto = !!CRYPTO_MAP[t];
+  const finnhubSym = CRYPTO_MAP[t] || t;
   const today = getToday();
   const weekAgo = getDateDaysAgo(7);
 
   const [quoteRes, profileRes, newsRes, metricsRes] = await Promise.allSettled([
-    fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${env.FINNHUB_KEY}`),
-    fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`),
-    fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${weekAgo}&to=${today}&token=${env.FINNHUB_KEY}`),
-    fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${env.FINNHUB_KEY}`),
+    fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSym)}&token=${env.FINNHUB_KEY}`),
+    isCrypto
+      ? fetch(`https://finnhub.io/api/v1/crypto/profile?symbol=${encodeURIComponent(finnhubSym)}&token=${env.FINNHUB_KEY}`)
+      : fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`),
+    isCrypto
+      ? Promise.resolve({ json: () => [] })
+      : fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${weekAgo}&to=${today}&token=${env.FINNHUB_KEY}`),
+    isCrypto
+      ? Promise.resolve({ json: () => ({}) })
+      : fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${env.FINNHUB_KEY}`),
   ]);
 
   const quote   = quoteRes.status   === 'fulfilled' ? await quoteRes.value.json()   : {};

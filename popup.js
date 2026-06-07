@@ -12,8 +12,11 @@ var historyList = [];
 // Chat state
 var chatHistory = [];
 var chatContext = null;
+var conversations = []; // [{id, title, messages, context}]
+var currentConvId = null;
+var convListVisible = false;
 
-function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history'], cb); }
+function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history','conversations','currentConvId'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -22,9 +25,44 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.lang) lang = s.lang;
     if (s.watchlist) watchlist = s.watchlist;
     if (s.history) historyList = s.history;
+    if (s.conversations) conversations = s.conversations;
+    if (s.currentConvId) currentConvId = s.currentConvId;
+
+    // Load current conversation
+    if (currentConvId) {
+      var conv = conversations.find(function(c) { return c.id === currentConvId; });
+      if (conv) {
+        chatHistory = conv.messages || [];
+        chatContext = conv.context || null;
+        document.getElementById('chat-conv-title').textContent = conv.title || 'Діалог';
+        if (chatContext) {
+          var ticker = chatContext.split(':')[0];
+          document.getElementById('chat-ctx-ticker').textContent = ticker;
+          document.getElementById('chat-ctx-bar').style.display = 'flex';
+        }
+        chatHistory.forEach(function(msg) {
+          appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
+        });
+      }
+    }
 
     applyLang();
+    fetchMarketData();
+    renderHomeWatchlist();
 
+    document.getElementById('nav-logo').addEventListener('click', function() {
+      if (currentAbort) { currentAbort.abort(); currentAbort = null; }
+      showPanel('search');
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('price-box').style.display = 'none';
+      document.getElementById('empty-state').style.display = 'block';
+      document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('analyze-btn').style.display = 'block';
+      document.getElementById('ticker-input').value = '';
+      document.getElementById('ticker-input').focus();
+      currentTicker = ''; currentData = null;
+    });
     document.getElementById('tab-search').addEventListener('click', function() { showPanel('search'); });
     document.getElementById('tab-watchlist').addEventListener('click', function() { showPanel('watchlist'); });
     document.getElementById('tab-history').addEventListener('click', function() { showPanel('history'); });
@@ -61,6 +99,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('chat-send-btn').addEventListener('click', sendChat);
     document.getElementById('chat-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') sendChat(); });
     document.getElementById('chat-ctx-clear').addEventListener('click', clearChatContext);
+    document.getElementById('btn-new-chat').addEventListener('click', newChat);
+    document.getElementById('btn-conv-list').addEventListener('click', toggleConvList);
   });
 });
 
@@ -72,7 +112,11 @@ function applyLang() {
   document.getElementById('tab-history').textContent = ua ? 'Іст.' : 'Hist.';
   document.getElementById('analyze-btn').textContent = ua ? 'Аналіз' : 'Analyze';
   document.getElementById('lbl-popular').textContent = ua ? 'Популярні:' : 'Popular:';
-  document.getElementById('empty-text').textContent = ua ? 'Введи тікер і отримай AI-аналіз' : 'Enter a ticker for AI analysis';
+  document.getElementById('lbl-market').textContent = ua ? 'Ринок' : 'Market';
+  var hwlEl = document.getElementById('lbl-home-wl');
+  if (hwlEl) hwlEl.textContent = ua ? 'Watchlist' : 'Watchlist';
+  var emptyTextEl = document.getElementById('empty-text');
+  if (emptyTextEl) emptyTextEl.textContent = ua ? 'Введи тікер і отримай AI-аналіз' : 'Enter a ticker for AI analysis';
   document.getElementById('r-disclaimer').textContent = ua ? 'Не є фінансовою порадою.' : 'Not financial advice.';
   document.getElementById('lbl-sector').textContent = ua ? 'Сектор' : 'Sector';
   document.getElementById('lbl-risk').textContent = ua ? 'Ризик' : 'Risk';
@@ -92,9 +136,20 @@ function applyLang() {
   document.getElementById('btn-save-threshold').textContent = ua ? 'Зберегти' : 'Save';
   document.getElementById('btn-check-now').textContent = ua ? '↻ Перевірити' : '↻ Check now';
   document.getElementById('lbl-chat-ctx').textContent = ua ? 'Контекст:' : 'Context:';
-  document.getElementById('lbl-chat-welcome').textContent = ua
+  var welcomeEl = document.getElementById('lbl-chat-welcome');
+  if (welcomeEl) welcomeEl.textContent = ua
     ? 'Привіт! Запитай мене про будь-яку акцію або ринок. Після аналізу — отримую контекст автоматично.'
     : 'Hi! Ask me about any stock or market. After analysis, I get context automatically.';
+  document.getElementById('chat-input').placeholder = ua ? 'Запитай про TSLA, ринок...' : 'Ask about TSLA, market...';
+  document.getElementById('btn-new-chat').title = ua ? 'Новий діалог' : 'New chat';
+  document.getElementById('btn-conv-list').title = ua ? 'Діалоги' : 'Conversations';
+  // Update conv title if it's a default one
+  var titleEl = document.getElementById('chat-conv-title');
+  if (titleEl.textContent === 'Новий діалог' || titleEl.textContent === 'New chat') {
+    titleEl.textContent = ua ? 'Новий діалог' : 'New chat';
+  }
+  // Re-render conv list if visible
+  if (convListVisible) renderConvList();
   document.getElementById('settings-how-it-works').textContent = ua
     ? 'Розширення використовує наш хмарний сервер для AI аналізу. Твої дані не зберігаються.'
     : 'The extension uses our cloud server for AI analysis. Your data is not stored.';
@@ -110,9 +165,106 @@ function showPanel(id) {
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
   document.getElementById('panel-' + id).classList.add('active');
   document.getElementById('tab-' + id).classList.add('active');
+  if (id === 'search') { renderHomeWatchlist(); fetchMarketData(); }
   if (id === 'watchlist') renderWatchlist();
   if (id === 'history') renderHistory();
   if (id === 'alerts') initAlerts();
+}
+
+// ── Market Overview ───────────────────────────────────────────────────────────
+function fetchMarketData() {
+  fetch(WORKER_URL + '/market')
+    .then(function(r) { return r.json(); })
+    .then(function(data) { renderMarketCards(data); })
+    .catch(function() {});
+}
+
+var CARD_TICKERS = { SP500: 'SPY', NASDAQ: 'QQQ', BTC: 'BTC', GOLD: 'GLD' };
+
+function renderMarketCards(data) {
+  var keys = ['SP500','NASDAQ','BTC','GOLD'];
+  var icons = { SP500:'📊', NASDAQ:'💻', BTC:'₿', GOLD:'🥇' };
+  var html = '';
+  keys.forEach(function(k) {
+    var d = data[k];
+    if (!d) return;
+    var up = d.pct >= 0;
+    var color = up ? 'var(--green)' : 'var(--red)';
+    var price = d.c >= 1000
+      ? '$' + Math.round(d.c).toLocaleString()
+      : '$' + d.c.toFixed(2);
+    html += '<div class="mcard" data-card="' + k + '" style="cursor:pointer" title="Аналіз ' + CARD_TICKERS[k] + '">' +
+      '<div class="mcard-label">' + icons[k] + ' ' + d.label + '</div>' +
+      '<div class="mcard-price">' + price + '</div>' +
+      '<div class="mcard-pct" style="color:' + color + '">' + (up?'▲':'▼') + Math.abs(d.pct).toFixed(2) + '%</div>' +
+    '</div>';
+  });
+  var el = document.getElementById('market-cards');
+  if (!el) return;
+  if (html) el.innerHTML = html;
+
+  // Make cards clickable
+  el.querySelectorAll('.mcard').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var ticker = CARD_TICKERS[this.getAttribute('data-card')];
+      if (ticker) {
+        document.getElementById('ticker-input').value = ticker;
+        runAnalysis();
+      }
+    });
+  });
+
+  // Update time
+  var timeEl = document.getElementById('market-time');
+  if (timeEl) {
+    var now = new Date();
+    timeEl.textContent = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+}
+
+function renderHomeWatchlist() {
+  var container = document.getElementById('home-watchlist');
+  var itemsEl = document.getElementById('home-wl-items');
+  if (!watchlist.length) { container.style.display = 'none'; return; }
+  container.style.display = 'block';
+  var shown = watchlist.slice(0, 4);
+  var html = '';
+  shown.forEach(function(w) {
+    var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
+    html += '<div class="hwl-item" data-ticker="' + w.ticker + '">' +
+      '<span class="hwl-ticker">' + w.ticker + '</span>' +
+      '<span class="hwl-price" id="hwp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
+      '<span class="hwl-pct" id="hwpc-' + w.ticker + '"></span>' +
+      '<span class="verdict-pill ' + pill + '" style="font-size:9px">' + normalizeVerdict(w.verdict||'', lang) + '</span>' +
+    '</div>';
+  });
+  itemsEl.innerHTML = html;
+
+  itemsEl.querySelectorAll('.hwl-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      document.getElementById('ticker-input').value = this.getAttribute('data-ticker');
+      runAnalysis();
+    });
+  });
+
+  // Fetch live prices
+  shown.forEach(function(w) {
+    fetch(WORKER_URL + '/price?ticker=' + w.ticker)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.c || d.c === 0) return;
+        var priceEl = document.getElementById('hwp-' + w.ticker);
+        var pctEl = document.getElementById('hwpc-' + w.ticker);
+        if (!priceEl) return;
+        var pct = ((d.c - d.pc) / d.pc * 100);
+        var up = pct >= 0;
+        priceEl.textContent = '$' + d.c.toFixed(2);
+        priceEl.style.color = 'var(--text)';
+        pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+        pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+      })
+      .catch(function() {});
+  });
 }
 
 // ── Analysis ──────────────────────────────────────────────────────────────────
@@ -153,18 +305,44 @@ function runAnalysis() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
-      // Show price from worker response (avoids extra round trip)
-      if (data._quote && data._quote.c) {
-        var q = data._quote;
-        var change = q.c - q.pc;
-        var pct = (change / q.pc) * 100;
-        showPrice({
-          price: q.c.toFixed(2),
-          change: (change >= 0 ? '+' : '') + change.toFixed(2),
-          pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
-          currency: 'USD',
+      // Fetch fresh price separately for accurate display (esp. crypto)
+      fetch(WORKER_URL + '/price?ticker=' + raw)
+        .then(function(r) { return r.json(); })
+        .then(function(pd) {
+          if (pd.c && pd.c > 0) {
+            var ch = pd.c - pd.pc;
+            var p = (ch / pd.pc) * 100;
+            showPrice({
+              price: formatPrice(pd.c),
+              change: (ch >= 0 ? '+' : '') + formatChange(ch),
+              pct: (p >= 0 ? '+' : '') + p.toFixed(2),
+              currency: 'USD',
+            });
+          } else if (data._quote && data._quote.c) {
+            var q = data._quote;
+            var change = q.c - q.pc;
+            var pct = (change / q.pc) * 100;
+            showPrice({
+              price: formatPrice(q.c),
+              change: (change >= 0 ? '+' : '') + formatChange(change),
+              pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
+              currency: 'USD',
+            });
+          }
+        })
+        .catch(function() {
+          if (data._quote && data._quote.c) {
+            var q = data._quote;
+            var change = q.c - q.pc;
+            var pct = (change / q.pc) * 100;
+            showPrice({
+              price: formatPrice(q.c),
+              change: (change >= 0 ? '+' : '') + formatChange(change),
+              pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
+              currency: 'USD',
+            });
+          }
         });
-      }
       finish(raw, normalizeAI(data));
     })
     .catch(function(e) {
@@ -192,6 +370,19 @@ function showPrice(info) {
     '<span style="font-size:20px;font-weight:600;font-family:var(--mono);color:var(--text)">' + info.currency + ' ' + info.price + '</span>' +
     '<span style="font-size:12px;font-family:var(--mono);color:' + c + ';margin-left:10px">' + a + ' ' + info.change + ' (' + info.pct + '%)</span>' +
     '<span style="font-size:9px;color:var(--dim);font-family:var(--mono);margin-left:auto">Finnhub</span>';
+}
+
+function formatPrice(p) {
+  if (p >= 10000) return Math.round(p).toLocaleString();
+  if (p >= 100)   return p.toFixed(2);
+  if (p >= 1)     return p.toFixed(2);
+  return p.toFixed(4);
+}
+
+function formatChange(ch) {
+  if (Math.abs(ch) >= 100) return Math.round(ch).toString();
+  if (Math.abs(ch) >= 1)   return ch.toFixed(2);
+  return ch.toFixed(4);
 }
 
 function normalizeAI(j) {
@@ -256,9 +447,11 @@ function normalizeVerdict(verdict, lang) {
 function normalizeSector(sector, lang) {
   if (!sector) return sector;
   var map = {
+    // English keys
     'technology': { ua: 'Технології', en: 'Technology' },
     'semiconductors': { ua: 'Напівпровідники', en: 'Semiconductors' },
     'automotive': { ua: 'Автомобілі', en: 'Automotive' },
+    'automobiles': { ua: 'Автомобілі', en: 'Automotive' },
     'auto / energy': { ua: 'Авто / Енергетика', en: 'Auto / Energy' },
     'social media / ai': { ua: 'Соц. мережі / AI', en: 'Social Media / AI' },
     'e-commerce / cloud': { ua: 'E-commerce / Cloud', en: 'E-commerce / Cloud' },
@@ -266,6 +459,7 @@ function normalizeSector(sector, lang) {
     'consumer discretionary': { ua: 'Споживчі товари', en: 'Consumer Discretionary' },
     'healthcare': { ua: 'Охорона здоровя', en: 'Healthcare' },
     'financials': { ua: 'Фінанси', en: 'Financials' },
+    'finance': { ua: 'Фінанси', en: 'Finance' },
     'information technology': { ua: 'Інф. технології', en: 'Information Technology' },
     'communication services': { ua: 'Комунікації', en: 'Communication Services' },
     'energy': { ua: 'Енергетика', en: 'Energy' },
@@ -280,6 +474,36 @@ function normalizeSector(sector, lang) {
     'cloud computing': { ua: 'Хмарні обч.', en: 'Cloud Computing' },
     'artificial intelligence': { ua: 'Штучний інтелект', en: 'Artificial Intelligence' },
     'quantum computing': { ua: 'Квантові обч.', en: 'Quantum Computing' },
+    'food & beverage': { ua: 'Їжа і напої', en: 'Food & Beverage' },
+    'retail': { ua: 'Роздрібна торг.', en: 'Retail' },
+    'media': { ua: 'Медіа', en: 'Media' },
+    'streaming': { ua: 'Стрімінг', en: 'Streaming' },
+    // Ukrainian keys
+    'технології': { ua: 'Технології', en: 'Technology' },
+    'напівпровідники': { ua: 'Напівпровідники', en: 'Semiconductors' },
+    'автомобілі': { ua: 'Автомобілі', en: 'Automotive' },
+    'автомобільна промисловість': { ua: 'Автомобілі', en: 'Automotive' },
+    'авто / енергетика': { ua: 'Авто / Енергетика', en: 'Auto / Energy' },
+    'соц. мережі / ai': { ua: 'Соц. мережі / AI', en: 'Social Media / AI' },
+    'споживчі товари': { ua: 'Споживчі товари', en: 'Consumer Goods' },
+    'охорона здоровя': { ua: 'Охорона здоровя', en: 'Healthcare' },
+    'фінанси': { ua: 'Фінанси', en: 'Finance' },
+    'інф. технології': { ua: 'Інф. технології', en: 'Information Technology' },
+    'комунікації': { ua: 'Комунікації', en: 'Communication Services' },
+    'енергетика': { ua: 'Енергетика', en: 'Energy' },
+    'комунальні': { ua: 'Комунальні', en: 'Utilities' },
+    'нерухомість': { ua: 'Нерухомість', en: 'Real Estate' },
+    'матеріали': { ua: 'Матеріали', en: 'Materials' },
+    'промисловість': { ua: 'Промисловість', en: 'Industrials' },
+    'оборонна пром.': { ua: 'Оборонна пром.', en: 'Defense' },
+    'біотехнології': { ua: 'Біотехнології', en: 'Biotechnology' },
+    'фармацевтика': { ua: 'Фармацевтика', en: 'Pharmaceuticals' },
+    'хмарні обч.': { ua: 'Хмарні обч.', en: 'Cloud Computing' },
+    'штучний інтелект': { ua: 'Штучний інтелект', en: 'Artificial Intelligence' },
+    'продукти харчування': { ua: 'Продукти харчування', en: 'Food & Beverage' },
+    'роздрібна торг.': { ua: 'Роздрібна торг.', en: 'Retail' },
+    'медіа': { ua: 'Медіа', en: 'Media' },
+    'стрімінг': { ua: 'Стрімінг', en: 'Streaming' },
   };
   var found = map[sector.toLowerCase()];
   if (found) return found[lang] || found.en;
@@ -381,17 +605,61 @@ function toggleWatch() {
 }
 function renderWatchlist() {
   var el = document.getElementById('watchlist-content');
-  if (!watchlist.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Watchlist порожній.' : 'Watchlist is empty.') + '</p></div>'; return; }
+  if (!watchlist.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Watchlist порожній.' : 'Watchlist is empty.') + '</p></div>';
+    return;
+  }
   var html = '';
   for (var i = 0; i < watchlist.length; i++) {
-    var w = watchlist[i]; var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
-    html += '<div class="watch-item" data-ticker="' + w.ticker + '"><span class="watch-ticker">' + w.ticker + '</span><div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div><span class="verdict-pill ' + pill + '">' + normalizeVerdict(w.verdict || '', lang) + '</span><button class="watch-remove" data-ticker="' + w.ticker + '">✕</button></div>';
+    var w = watchlist[i];
+    var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
+    html += '<div class="watch-item" data-ticker="' + w.ticker + '">' +
+      '<span class="watch-ticker">' + w.ticker + '</span>' +
+      '<div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div>' +
+      '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
+      '<span class="watch-pct" id="wpc-' + w.ticker + '"></span>' +
+      '<span class="verdict-pill ' + pill + '">' + normalizeVerdict(w.verdict || '', lang) + '</span>' +
+      '<button class="watch-remove" data-ticker="' + w.ticker + '">✕</button>' +
+    '</div>';
   }
   el.innerHTML = html;
+
   var items = el.querySelectorAll('.watch-item');
-  for (var i = 0; i < items.length; i++) { items[i].addEventListener('click', function(e) { if (e.target.classList.contains('watch-remove')) return; document.getElementById('ticker-input').value = this.getAttribute('data-ticker'); showPanel('search'); runAnalysis(); }); }
+  for (var i = 0; i < items.length; i++) {
+    items[i].addEventListener('click', function(e) {
+      if (e.target.classList.contains('watch-remove')) return;
+      document.getElementById('ticker-input').value = this.getAttribute('data-ticker');
+      showPanel('search'); runAnalysis();
+    });
+  }
   var removes = el.querySelectorAll('.watch-remove');
-  for (var i = 0; i < removes.length; i++) { removes[i].addEventListener('click', function(e) { e.stopPropagation(); var t = this.getAttribute('data-ticker'); watchlist = watchlist.filter(function(w) { return w.ticker !== t; }); save({ watchlist: watchlist }); renderWatchlist(); updateWatchBtn(); }); }
+  for (var i = 0; i < removes.length; i++) {
+    removes[i].addEventListener('click', function(e) {
+      e.stopPropagation();
+      var t = this.getAttribute('data-ticker');
+      watchlist = watchlist.filter(function(w) { return w.ticker !== t; });
+      save({ watchlist: watchlist }); renderWatchlist(); updateWatchBtn();
+    });
+  }
+
+  // Fetch live prices for all tickers
+  watchlist.forEach(function(w) {
+    fetch(WORKER_URL + '/price?ticker=' + w.ticker)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.c || d.c === 0) return;
+        var priceEl = document.getElementById('wp-' + w.ticker);
+        var pctEl = document.getElementById('wpc-' + w.ticker);
+        if (!priceEl) return;
+        var pct = ((d.c - d.pc) / d.pc * 100);
+        var up = pct >= 0;
+        priceEl.textContent = '$' + d.c.toFixed(2);
+        priceEl.style.color = 'var(--text)';
+        pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+        pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+      })
+      .catch(function() {});
+  });
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -423,17 +691,174 @@ function toast(msg) {
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
+function saveConversations() {
+  save({ conversations: conversations, currentConvId: currentConvId });
+}
+
+function saveCurrentConv() {
+  if (!currentConvId) return;
+  var idx = conversations.findIndex(function(c) { return c.id === currentConvId; });
+  if (idx >= 0) {
+    conversations[idx].messages = chatHistory;
+    conversations[idx].context = chatContext;
+  }
+  saveConversations();
+}
+
+function newChat() {
+  // Save current conv if has messages
+  if (chatHistory.length > 0) saveCurrentConv();
+
+  // Create new conversation
+  var id = Date.now();
+  var conv = { id: id, title: lang === 'ua' ? 'Новий діалог' : 'New chat', messages: [], context: null, date: id };
+  conversations.unshift(conv);
+  currentConvId = id;
+  chatHistory = [];
+  chatContext = null;
+
+  // Reset UI
+  document.getElementById('chat-conv-title').textContent = conv.title;
+  document.getElementById('chat-ctx-bar').style.display = 'none';
+  document.getElementById('chat-ctx-ticker').textContent = '';
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div>' +
+    '<p id="lbl-chat-welcome">' + (lang === 'ua' ? 'Привіт! Запитай мене про будь-яку акцію або ринок.' : 'Hi! Ask me about any stock or market.') + '</p></div>';
+
+  // Hide conv list if visible
+  if (convListVisible) toggleConvList();
+  document.getElementById('chat-input').focus();
+  saveConversations();
+}
+
+function toggleConvList() {
+  convListVisible = !convListVisible;
+  var listEl = document.getElementById('conv-list');
+  var msgsEl = document.getElementById('chat-messages');
+  var inputRow = document.querySelector('.chat-input-row');
+  var ctxBar = document.getElementById('chat-ctx-bar');
+
+  if (convListVisible) {
+    listEl.classList.add('active');
+    msgsEl.style.display = 'none';
+    inputRow.style.display = 'none';
+    ctxBar.style.display = 'none';
+    renderConvList();
+  } else {
+    listEl.classList.remove('active');
+    msgsEl.style.display = 'flex';
+    inputRow.style.display = 'flex';
+    if (chatContext) ctxBar.style.display = 'flex';
+  }
+}
+
+function renderConvList() {
+  var el = document.getElementById('conv-list');
+  if (!conversations.length) {
+    el.innerHTML = '<div class="conv-empty">' + (lang === 'ua' ? 'Немає збережених діалогів' : 'No saved conversations') + '</div>';
+    return;
+  }
+  var html = '';
+  conversations.forEach(function(c) {
+    var ago = timeSince(c.date);
+    var isCurrent = c.id === currentConvId;
+    html += '<div class="conv-item' + (isCurrent ? ' current' : '') + '" data-id="' + c.id + '">' +
+      '<div class="conv-info"><div class="conv-title">' + escHtml(c.title) + '</div><div class="conv-date">' + ago + ' · ' + c.messages.length + ' повід.</div></div>' +
+      '<button class="conv-del" data-id="' + c.id + '">🗑</button>' +
+    '</div>';
+  });
+  el.innerHTML = html;
+
+  el.querySelectorAll('.conv-item').forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      if (e.target.classList.contains('conv-del')) return;
+      loadConversation(parseInt(this.getAttribute('data-id')));
+    });
+  });
+  el.querySelectorAll('.conv-del').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      deleteConversation(parseInt(this.getAttribute('data-id')));
+    });
+  });
+}
+
+function loadConversation(id) {
+  if (chatHistory.length > 0) saveCurrentConv();
+  var conv = conversations.find(function(c) { return c.id === id; });
+  if (!conv) return;
+
+  currentConvId = id;
+  chatHistory = conv.messages || [];
+  chatContext = conv.context || null;
+  document.getElementById('chat-conv-title').textContent = conv.title;
+
+  // Restore context bar
+  if (chatContext) {
+    document.getElementById('chat-ctx-ticker').textContent = chatContext.split(':')[0];
+    document.getElementById('chat-ctx-bar').style.display = 'flex';
+  } else {
+    document.getElementById('chat-ctx-bar').style.display = 'none';
+  }
+
+  // Restore messages
+  document.getElementById('chat-messages').innerHTML = '';
+  if (chatHistory.length === 0) {
+    document.getElementById('chat-messages').innerHTML =
+      '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div><p>' +
+      (lang === 'ua' ? 'Продовжуй діалог...' : 'Continue the conversation...') + '</p></div>';
+  } else {
+    chatHistory.forEach(function(msg) {
+      appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
+    });
+  }
+
+  saveConversations();
+  if (convListVisible) toggleConvList();
+}
+
+function deleteConversation(id) {
+  conversations = conversations.filter(function(c) { return c.id !== id; });
+  if (currentConvId === id) {
+    if (conversations.length > 0) {
+      loadConversation(conversations[0].id);
+      return;
+    } else {
+      currentConvId = null;
+      chatHistory = [];
+      chatContext = null;
+      document.getElementById('chat-conv-title').textContent = lang === 'ua' ? 'Новий діалог' : 'New chat';
+      document.getElementById('chat-ctx-bar').style.display = 'none';
+    }
+  }
+  saveConversations();
+  renderConvList();
+}
+
 function setChatContext(ticker, data) {
   chatContext = ticker + ': sector=' + data.sector + ', verdict=' + data.verdict + ', trend=' + data.trend + ', risk=' + data.risk + '. Forecast: ' + data.forecast;
-  var bar = document.getElementById('chat-ctx-bar');
   document.getElementById('chat-ctx-ticker').textContent = ticker;
-  bar.style.display = 'flex';
+  document.getElementById('chat-ctx-bar').style.display = 'flex';
+  saveCurrentConv();
 }
 
 function clearChatContext() {
   chatContext = null;
   document.getElementById('chat-ctx-bar').style.display = 'none';
   document.getElementById('chat-ctx-ticker').textContent = '';
+  saveCurrentConv();
+}
+
+function timeSince(ts) {
+  var diff = Math.floor((Date.now() - ts) / 60000);
+  if (diff < 1) return lang === 'ua' ? 'щойно' : 'just now';
+  if (diff < 60) return diff + (lang === 'ua' ? ' хв' : 'm ago');
+  if (diff < 1440) return Math.floor(diff / 60) + (lang === 'ua' ? ' год' : 'h ago');
+  return Math.floor(diff / 1440) + (lang === 'ua' ? ' д' : 'd ago');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function sendChat() {
@@ -442,6 +867,24 @@ function sendChat() {
   if (!msg) return;
   input.value = '';
   input.focus();
+
+  // Auto-create conversation on first message
+  if (!currentConvId) {
+    var id = Date.now();
+    var title = msg.slice(0, 35) + (msg.length > 35 ? '…' : '');
+    var conv = { id: id, title: title, messages: [], context: chatContext, date: id };
+    conversations.unshift(conv);
+    currentConvId = id;
+    document.getElementById('chat-conv-title').textContent = title;
+    saveConversations();
+  } else if (chatHistory.length === 0) {
+    // Update title from first message
+    var idx = conversations.findIndex(function(c) { return c.id === currentConvId; });
+    if (idx >= 0) {
+      conversations[idx].title = msg.slice(0, 35) + (msg.length > 35 ? '…' : '');
+      document.getElementById('chat-conv-title').textContent = conversations[idx].title;
+    }
+  }
 
   appendChatMsg('user', msg);
   chatHistory.push({ role: 'user', content: msg });
@@ -471,7 +914,8 @@ function sendChat() {
       var reply = data.reply || (lang === 'ua' ? 'Порожня відповідь.' : 'Empty response.');
       appendChatMsg('ai', reply);
       chatHistory.push({ role: 'assistant', content: reply });
-      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+      if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+      saveCurrentConv();
     })
     .catch(function() {
       typingEl.remove();
@@ -497,6 +941,30 @@ function appendChatMsg(role, content, isTyping) {
   var container = document.getElementById('chat-messages');
   var welcome = document.getElementById('chat-welcome');
   if (welcome) welcome.style.display = 'none';
+
+  if (role === 'ai' && !isTyping) {
+    var wrap = document.createElement('div');
+    wrap.className = 'chat-msg-wrap';
+    var el = document.createElement('div');
+    el.className = 'chat-msg ai';
+    el.innerHTML = renderChatText(content);
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'chat-copy-btn';
+    copyBtn.textContent = '⎘';
+    copyBtn.title = 'Copy';
+    copyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText(content).then(function() {
+        copyBtn.textContent = '✓';
+        setTimeout(function() { copyBtn.textContent = '⎘'; }, 1500);
+      });
+    });
+    wrap.appendChild(el);
+    wrap.appendChild(copyBtn);
+    container.appendChild(wrap);
+    container.scrollTop = container.scrollHeight;
+    return el;
+  }
+
   var el = document.createElement('div');
   el.className = 'chat-msg ' + role + (isTyping ? ' typing' : '');
   if (isTyping) {
