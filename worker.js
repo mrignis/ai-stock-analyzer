@@ -75,6 +75,9 @@ export default {
       if (url.pathname === '/chat' && request.method === 'POST') {
         return await handleChat(request, env);
       }
+      if (url.pathname === '/news' && request.method === 'GET') {
+        return await handleNews(request, env);
+      }
       return json({ error: 'Not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -200,6 +203,39 @@ Return ONLY this JSON structure:
     return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
   }
   return json({ ...analysis, _quote: quote });
+}
+
+// ── /news?ticker=TSLA ────────────────────────────────────────────────────────
+async function handleNews(request, env) {
+  const url = new URL(request.url);
+  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
+  if (!raw) return json({ error: 'Missing ticker' }, 400);
+
+  const t = CRYPTO_NAMES[raw] || raw;
+  const isCrypto = !!CRYPTO_MAP[t];
+  if (isCrypto) return json([]); // Finnhub free tier has no crypto news
+
+  const today = getToday();
+  const weekAgo = getDateDaysAgo(7);
+
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(t)}&from=${weekAgo}&to=${today}&token=${env.FINNHUB_KEY}`
+    );
+    const raw_news = await res.json();
+    if (!Array.isArray(raw_news)) return json([]);
+
+    const news = raw_news.slice(0, 12).map(n => ({
+      headline: n.headline || '',
+      source:   n.source   || '',
+      url:      n.url      || '',
+      datetime: n.datetime || 0,
+      summary:  n.summary  ? n.summary.slice(0, 180) : '',
+    }));
+    return json(news);
+  } catch (e) {
+    return json([]);
+  }
 }
 
 // ── /chat ─────────────────────────────────────────────────────────────────────

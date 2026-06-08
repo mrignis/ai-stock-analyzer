@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('tab-watchlist').addEventListener('click', function() { showPanel('watchlist'); });
     document.getElementById('tab-history').addEventListener('click', function() { showPanel('history'); });
     document.getElementById('tab-chat').addEventListener('click', function() { showPanel('chat'); });
+    document.getElementById('tab-news').addEventListener('click', function() { showPanel('news'); });
     document.getElementById('tab-alerts').addEventListener('click', function() { showPanel('alerts'); });
     document.getElementById('tab-settings').addEventListener('click', function() { showPanel('settings'); });
 
@@ -112,6 +113,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-clear').addEventListener('click', function() { historyList = []; save({ history: [] }); renderHistory(); });
 
     // Chat
+    document.getElementById('news-search-btn').addEventListener('click', function() { fetchNews(document.getElementById('news-input').value.trim().toUpperCase()); });
+    document.getElementById('news-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') fetchNews(this.value.trim().toUpperCase()); });
     document.getElementById('chat-send-btn').addEventListener('click', sendChat);
     document.getElementById('chat-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') sendChat(); });
     document.getElementById('chat-ctx-clear').addEventListener('click', clearChatContext);
@@ -172,6 +175,10 @@ function applyLang() {
   document.getElementById('settings-free-note').textContent = ua
     ? '✓ Безкоштовно — ключі не потрібні. Аналіз на базі Groq Llama 3.3 + реальні дані Finnhub.'
     : '✓ Free — no API keys needed. Powered by Groq Llama 3.3 + real-time Finnhub data.';
+  document.getElementById('news-search-btn').textContent = ua ? 'Пошук' : 'Search';
+  document.getElementById('news-input').placeholder = ua ? 'TSLA, AAPL...' : 'TSLA, AAPL...';
+  var newsEmptyEl = document.getElementById('lbl-news-empty');
+  if (newsEmptyEl) newsEmptyEl.textContent = ua ? 'Введи тікер або вибери зі списку' : 'Enter a ticker or pick from the list';
   var stopBtn = document.getElementById('stop-btn');
   if (stopBtn) stopBtn.textContent = ua ? '✕ Стоп' : '✕ Stop';
 }
@@ -187,6 +194,7 @@ function showPanel(id) {
   if (id === 'search') { renderHomeWatchlist(); fetchMarketData(); }
   if (id === 'watchlist') renderWatchlist();
   if (id === 'history') renderHistory();
+  if (id === 'news') initNews();
   if (id === 'alerts') initAlerts();
 }
 
@@ -1044,6 +1052,106 @@ function appendChatMsg(role, content, isTyping) {
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return el;
+}
+
+// ── News ──────────────────────────────────────────────────────────────────────
+var CACHE_NEWS_TTL = 15 * 60 * 1000; // 15 хв
+var currentNewsTicker = '';
+
+function initNews() {
+  renderNewsPills();
+  // Auto-load news for current ticker if analyzed
+  if (currentTicker) {
+    document.getElementById('news-input').value = currentTicker;
+    fetchNews(currentTicker);
+  } else if (watchlist.length > 0) {
+    fetchNews(watchlist[0].ticker);
+  }
+}
+
+function renderNewsPills() {
+  var el = document.getElementById('news-pills');
+  if (!watchlist.length) { el.innerHTML = ''; return; }
+  var html = '';
+  watchlist.slice(0, 6).forEach(function(w) {
+    var active = w.ticker === currentNewsTicker ? ' active' : '';
+    html += '<button class="news-pill' + active + '" data-ticker="' + w.ticker + '">' + w.ticker + '</button>';
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.news-pill').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.getElementById('news-input').value = this.getAttribute('data-ticker');
+      fetchNews(this.getAttribute('data-ticker'));
+    });
+  });
+}
+
+function fetchNews(ticker) {
+  if (!ticker) return;
+  currentNewsTicker = ticker;
+  document.getElementById('news-input').value = ticker;
+
+  // Update pill active state
+  document.querySelectorAll('.news-pill').forEach(function(p) {
+    p.classList.toggle('active', p.getAttribute('data-ticker') === ticker);
+  });
+
+  var listEl  = document.getElementById('news-list');
+  var emptyEl = document.getElementById('news-empty');
+  listEl.style.display = 'none';
+  emptyEl.style.display = 'block';
+  document.getElementById('lbl-news-empty').textContent = lang === 'ua' ? 'Завантаження...' : 'Loading...';
+
+  cacheGet('news_' + ticker, CACHE_NEWS_TTL, function(cached) {
+    if (cached) { renderNews(ticker, cached); return; }
+    fetch(WORKER_URL + '/news?ticker=' + encodeURIComponent(ticker))
+      .then(function(r) { return r.json(); })
+      .then(function(articles) {
+        if (Array.isArray(articles)) cacheSet('news_' + ticker, articles);
+        renderNews(ticker, Array.isArray(articles) ? articles : []);
+      })
+      .catch(function() { renderNews(ticker, []); });
+  });
+}
+
+function renderNews(ticker, articles) {
+  var listEl  = document.getElementById('news-list');
+  var emptyEl = document.getElementById('news-empty');
+
+  if (!articles.length) {
+    listEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    document.getElementById('lbl-news-empty').textContent = lang === 'ua'
+      ? 'Новин не знайдено для ' + ticker
+      : 'No news found for ' + ticker;
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  listEl.style.display  = 'flex';
+
+  var html = '';
+  articles.forEach(function(n) {
+    var ago = timeAgoNews(n.datetime);
+    var src = n.source ? escHtml(n.source) : '—';
+    var headline = escHtml(n.headline || '');
+    var summary  = n.summary ? escHtml(n.summary) : '';
+    html += '<div class="news-item">' +
+      '<div class="news-meta"><span>' + src + '</span><span>' + ago + '</span></div>' +
+      '<div class="news-headline">' + headline + '</div>' +
+      (summary ? '<div class="news-summary">' + summary + '</div>' : '') +
+      (n.url ? '<a class="news-link" href="' + n.url + '" target="_blank">' + (lang === 'ua' ? 'Читати →' : 'Read →') + '</a>' : '') +
+    '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+function timeAgoNews(ts) {
+  if (!ts) return '';
+  var diff = Math.floor((Date.now() / 1000 - ts) / 60);
+  if (diff < 60)   return diff + (lang === 'ua' ? ' хв тому' : 'm ago');
+  if (diff < 1440) return Math.floor(diff / 60) + (lang === 'ua' ? ' год тому' : 'h ago');
+  return Math.floor(diff / 1440) + (lang === 'ua' ? ' дн тому' : 'd ago');
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
