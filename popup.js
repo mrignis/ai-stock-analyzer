@@ -1136,11 +1136,12 @@ function renderNews(ticker, articles) {
     var src = n.source ? escHtml(n.source) : '—';
     var headline = escHtml(n.headline || '');
     var summary  = n.summary ? escHtml(n.summary) : '';
-    html += '<div class="news-item">' +
+    var href = n.url ? ' onclick="window.open(\'' + n.url.replace(/'/g, "\\'") + '\',\'_blank\')" style="cursor:pointer"' : '';
+    html += '<div class="news-item"' + href + '>' +
       '<div class="news-meta"><span>' + src + '</span><span>' + ago + '</span></div>' +
       '<div class="news-headline">' + headline + '</div>' +
       (summary ? '<div class="news-summary">' + summary + '</div>' : '') +
-      (n.url ? '<a class="news-link" href="' + n.url + '" target="_blank">' + (lang === 'ua' ? 'Читати →' : 'Read →') + '</a>' : '') +
+      (n.url ? '<div class="news-read">' + (lang === 'ua' ? 'Читати статтю →' : 'Read article →') + '</div>' : '') +
     '</div>';
   });
   listEl.innerHTML = html;
