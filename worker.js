@@ -175,7 +175,7 @@ ${news || 'No recent news available'}`.trim();
 
 ${context}
 
-${ua ? 'Respond ENTIRELY in Ukrainian language.' : 'Respond in English.'}
+${ua ? 'IMPORTANT: Respond ENTIRELY in Ukrainian language using only Cyrillic characters. Never mix in Chinese, Japanese, or any other non-Cyrillic script.' : 'Respond in English only.'}
 Return ONLY this JSON structure:
 {"sector":"...","risk":"${ua ? 'Високий або Середній або Низький' : 'High or Medium or Low'}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${ua ? 'одне слово: Купувати або Тримати або Продавати' : 'one word: Buy or Hold or Sell'}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
 
@@ -249,7 +249,7 @@ async function handleChat(request, env) {
     'Your training data has a cutoff — always prioritize the live market data provided below over your training knowledge. Never give prices or news from your training as if they are current.',
     context ? `Current analysis context: ${context}` : '',
     liveData,
-    ua ? 'Always respond in Ukrainian language.' : 'Respond in English.',
+    ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
     'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks, no bullet symbols. Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
