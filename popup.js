@@ -288,7 +288,7 @@ function renderHomeWatchlist() {
       pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
     }
     cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
-      if (cached) applyPrice(cached);
+      if (cached) { applyPrice(cached); return; } // cache fresh — skip network
       fetch(WORKER_URL + '/price?ticker=' + w.ticker)
         .then(function(r) { return r.json(); })
         .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyPrice(d); } })
@@ -324,15 +324,17 @@ function runAnalysis() {
   document.getElementById('analyze-btn').style.display = 'none';
   document.getElementById('stop-btn').style.display = 'block';
 
+  // Cache key includes lang — UA and EN results cached separately
+  var cacheKey = 'analyze_' + raw + '_' + lang;
+
   // Check cache first — show result instantly if available
-  cacheGet('analyze_' + raw, CACHE_ANALYZE_TTL, function(cached) {
+  cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
-      // Show cached price, then fetch fresh in background
+      // Show cached price (from _quote), also seed the price cache
       showCachedPrice(raw, cached);
+      if (cached._quote && cached._quote.c > 0) cacheSet('price_' + raw, cached._quote);
       finish(raw, normalizeAI(cached));
-      // Silent background price refresh
-      fetchFreshPrice(raw);
       return;
     }
 
@@ -350,7 +352,9 @@ function runAnalysis() {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
-        cacheSet('analyze_' + raw, data); // Save to cache
+        cacheSet(cacheKey, data); // Save to cache (includes lang)
+        // Seed price cache from _quote to avoid extra fetch next time
+        if (data._quote && data._quote.c > 0) cacheSet('price_' + raw, data._quote);
         fetchFreshPrice(raw, data);
         finish(raw, normalizeAI(data));
       })
@@ -399,8 +403,8 @@ function showCachedPrice(raw, cached) {
 
 function renderPrice(q) {
   if (!q || !q.c) return;
-  var change = q.c - q.pc;
-  var pct = (change / q.pc) * 100;
+  var change = q.pc > 0 ? q.c - q.pc : 0;
+  var pct    = q.pc > 0 ? (change / q.pc) * 100 : 0;
   showPrice({
     price: formatPrice(q.c),
     change: (change >= 0 ? '+' : '') + formatChange(change),
@@ -718,7 +722,7 @@ function renderWatchlist() {
       pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
     }
     cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
-      if (cached) applyWPrice(cached);
+      if (cached) { applyWPrice(cached); return; } // cache fresh — skip network
       fetch(WORKER_URL + '/price?ticker=' + w.ticker)
         .then(function(r) { return r.json(); })
         .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyWPrice(d); } })

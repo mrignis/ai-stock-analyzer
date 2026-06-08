@@ -27,7 +27,7 @@ const CRYPTO_NAMES = {
   'CARDANO': 'ADA', 'DOGECOIN': 'DOGE', 'BINANCECOIN': 'BNB',
   'RIPPLE': 'XRP', 'POLKADOT': 'DOT', 'AVALANCHE': 'AVAX',
   'POLYGON': 'MATIC', 'CHAINLINK': 'LINK', 'UNISWAP': 'UNI',
-  'SHIBA': 'SHIB', 'LITECOIN': 'LTC', 'TRON': 'TRX',
+  'TRON': 'TRX',
 };
 
 async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
@@ -193,7 +193,12 @@ Return ONLY this JSON structure:
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return json({ error: 'AI parse error', raw: text.slice(0, 300) }, 500);
 
-  const analysis = JSON.parse(match[0]);
+  let analysis;
+  try {
+    analysis = JSON.parse(match[0]);
+  } catch (e) {
+    return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
+  }
   return json({ ...analysis, _quote: quote });
 }
 
