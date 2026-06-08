@@ -162,6 +162,22 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .conv-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:0 3px;flex-shrink:0}
 .conv-del:hover{color:var(--red)}
 .conv-empty{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:12px}
+/* Portfolio */
+.wl-subtabs{display:flex;gap:3px}
+.wl-subtab{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;letter-spacing:0.04em}
+.wl-subtab.active{background:var(--green-dim);color:var(--green);border-color:var(--green-border)}
+.pf-row{display:flex;align-items:center;background:var(--surface2);border-radius:var(--r);padding:9px 12px;margin-bottom:6px;border:1px solid var(--border);gap:8px;flex-wrap:wrap}
+.pf-ticker{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green);width:48px;flex-shrink:0}
+.pf-info{flex:1;min-width:0}
+.pf-shares{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.pf-prices{font-family:var(--mono);font-size:11px;color:var(--text)}
+.pf-pl{font-family:var(--mono);font-size:12px;font-weight:500;text-align:right;flex-shrink:0}
+.pf-remove{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;flex-shrink:0}
+.pf-remove:hover{color:var(--red)}
+.pf-summary-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pf-sum-item{text-align:center;flex:1}
+.pf-sum-lbl{font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.pf-sum-val{font-family:var(--mono);font-size:13px;font-weight:500}
 /* News */
 .news-search-row{display:flex;gap:6px;margin-bottom:10px}
 .news-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
@@ -277,13 +293,38 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
   </div>
 </div>
 
-<!-- WATCHLIST -->
+<!-- WATCHLIST + PORTFOLIO -->
 <div class="panel" id="panel-watchlist">
   <div class="section-head">
-    <span class="section-title-lbl" id="lbl-watchlist-title">Відстежуються</span>
+    <div class="wl-subtabs">
+      <button class="wl-subtab active" id="wl-tab-wl" id="lbl-watchlist-title">WL</button>
+      <button class="wl-subtab" id="wl-tab-pf">💼 Portfolio</button>
+    </div>
     <button class="btn-outline" id="btn-refresh">↻</button>
   </div>
+
+  <!-- Watchlist -->
   <div id="watchlist-content"></div>
+
+  <!-- Portfolio -->
+  <div id="portfolio-panel" style="display:none">
+    <!-- Summary -->
+    <div id="portfolio-summary" style="display:none;background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;border:1px solid var(--border2)"></div>
+
+    <!-- Add position form -->
+    <div style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;border:1px solid var(--border2)">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px" id="lbl-add-position">Додати позицію</div>
+      <div style="display:flex;gap:5px;margin-bottom:6px">
+        <input type="text" id="pf-ticker" maxlength="10" placeholder="TSLA" style="width:70px;flex:none"/>
+        <input type="number" id="pf-shares" placeholder="Акцій" min="0.001" step="any" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none"/>
+        <input type="number" id="pf-buyprice" placeholder="Ціна $" min="0.0001" step="any" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none"/>
+      </div>
+      <button class="btn-green" id="pf-add-btn" style="width:100%;height:32px;font-size:12px" id="lbl-pf-add">+ Додати</button>
+    </div>
+
+    <!-- Positions list -->
+    <div id="portfolio-list"></div>
+  </div>
 </div>
 
 <!-- HISTORY -->

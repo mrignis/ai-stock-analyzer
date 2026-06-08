@@ -8,6 +8,7 @@ var currentTicker = '';
 var currentData = null;
 var watchlist = [];
 var historyList = [];
+var portfolio = []; // [{ticker, shares, buyPrice, addedAt}]
 
 // Chat state
 var chatHistory = [];
@@ -16,7 +17,7 @@ var conversations = []; // [{id, title, messages, context}]
 var currentConvId = null;
 var convListVisible = false;
 
-function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history','conversations','currentConvId'], cb); }
+function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history','conversations','currentConvId','portfolio'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.history) historyList = s.history;
     if (s.conversations) conversations = s.conversations;
     if (s.currentConvId) currentConvId = s.currentConvId;
+    if (s.portfolio) portfolio = s.portfolio;
 
     // Load current conversation
     if (currentConvId) {
@@ -109,7 +111,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.getElementById('watch-btn').addEventListener('click', toggleWatch);
-    document.getElementById('btn-refresh').addEventListener('click', renderWatchlist);
+    document.getElementById('btn-refresh').addEventListener('click', function() {
+      if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
+      else renderWatchlist();
+    });
+
+    // WL ↔ Portfolio sub-tabs
+    document.getElementById('wl-tab-wl').addEventListener('click', function() {
+      this.classList.add('active');
+      document.getElementById('wl-tab-pf').classList.remove('active');
+      document.getElementById('watchlist-content').style.display = 'block';
+      document.getElementById('portfolio-panel').style.display = 'none';
+    });
+    document.getElementById('wl-tab-pf').addEventListener('click', function() {
+      this.classList.add('active');
+      document.getElementById('wl-tab-wl').classList.remove('active');
+      document.getElementById('watchlist-content').style.display = 'none';
+      document.getElementById('portfolio-panel').style.display = 'block';
+      renderPortfolio();
+    });
+    document.getElementById('pf-add-btn').addEventListener('click', addPortfolioPosition);
+    document.getElementById('pf-ticker').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-shares').focus(); });
+    document.getElementById('pf-shares').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-buyprice').focus(); });
+    document.getElementById('pf-buyprice').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPortfolioPosition(); });
     document.getElementById('btn-clear').addEventListener('click', function() { historyList = []; save({ history: [] }); renderHistory(); });
 
     // Chat
@@ -146,7 +170,14 @@ function applyLang() {
   document.getElementById('lbl-risks').textContent = ua ? 'Головні ризики' : 'Key risks';
   document.getElementById('lbl-forecast').textContent = ua ? 'AI Прогноз' : 'AI Forecast';
   document.getElementById('lbl-conclusion').textContent = ua ? 'Висновок AI' : 'AI Conclusion';
-  document.getElementById('lbl-watchlist-title').textContent = ua ? 'Відстежуються' : 'Watchlist';
+  // lbl-watchlist-title moved to wl-tab-wl
+  document.getElementById('wl-tab-wl').textContent = ua ? 'WL' : 'WL';
+  document.getElementById('wl-tab-pf').textContent = ua ? '💼 Портфель' : '💼 Portfolio';
+  document.getElementById('lbl-add-position').textContent = ua ? 'Додати позицію' : 'Add position';
+  document.getElementById('pf-ticker').placeholder = ua ? 'TSLA' : 'TSLA';
+  document.getElementById('pf-shares').placeholder = ua ? 'Акцій' : 'Shares';
+  document.getElementById('pf-buyprice').placeholder = ua ? 'Ціна $' : 'Buy price $';
+  document.getElementById('pf-add-btn').textContent = ua ? '+ Додати' : '+ Add';
   document.getElementById('lbl-history-title').textContent = ua ? 'Історія пошуків' : 'Search History';
   document.getElementById('btn-clear').textContent = ua ? 'Очистити' : 'Clear';
   document.getElementById('lbl-alerts-title').textContent = ua ? 'Алерти цін' : 'Price Alerts';
@@ -1052,6 +1083,127 @@ function appendChatMsg(role, content, isTyping) {
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return el;
+}
+
+// ── Portfolio ─────────────────────────────────────────────────────────────────
+function savePortfolio() { save({ portfolio: portfolio }); }
+
+function addPortfolioPosition() {
+  var ticker   = document.getElementById('pf-ticker').value.trim().toUpperCase();
+  var shares   = parseFloat(document.getElementById('pf-shares').value);
+  var buyPrice = parseFloat(document.getElementById('pf-buyprice').value);
+  if (!ticker || isNaN(shares) || shares <= 0 || isNaN(buyPrice) || buyPrice <= 0) {
+    toast(lang === 'ua' ? '⚠ Заповни всі поля' : '⚠ Fill all fields');
+    return;
+  }
+  portfolio.push({ ticker: ticker, shares: shares, buyPrice: buyPrice, addedAt: Date.now() });
+  savePortfolio();
+  document.getElementById('pf-ticker').value = '';
+  document.getElementById('pf-shares').value = '';
+  document.getElementById('pf-buyprice').value = '';
+  document.getElementById('pf-ticker').focus();
+  renderPortfolio();
+  toast(lang === 'ua' ? '✓ Додано ' + ticker : '✓ Added ' + ticker);
+}
+
+function removePortfolioPosition(idx) {
+  portfolio.splice(idx, 1);
+  savePortfolio();
+  renderPortfolio();
+}
+
+function renderPortfolio() {
+  var listEl = document.getElementById('portfolio-list');
+  var summEl = document.getElementById('portfolio-summary');
+
+  if (!portfolio.length) {
+    summEl.style.display = 'none';
+    listEl.innerHTML = '<div class="empty"><div class="empty-icon">💼</div><p>' +
+      (lang === 'ua' ? 'Портфель порожній.<br>Додай першу позицію вище.' : 'Portfolio is empty.<br>Add your first position above.') +
+      '</p></div>';
+    return;
+  }
+
+  // Render rows with placeholders, then fetch prices
+  var html = '';
+  portfolio.forEach(function(p, i) {
+    html += '<div class="pf-row" id="pf-row-' + i + '">' +
+      '<span class="pf-ticker">' + p.ticker + '</span>' +
+      '<div class="pf-info">' +
+        '<div class="pf-shares">' + p.shares + ' ' + (lang === 'ua' ? 'акцій' : 'shares') + ' · $' + p.buyPrice.toFixed(2) + '</div>' +
+        '<div class="pf-prices" id="pf-price-' + i + '" style="color:var(--dim)">—</div>' +
+      '</div>' +
+      '<div class="pf-pl" id="pf-pl-' + i + '" style="color:var(--dim)">—</div>' +
+      '<button class="pf-remove" data-idx="' + i + '">✕</button>' +
+    '</div>';
+  });
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll('.pf-remove').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      removePortfolioPosition(parseInt(this.getAttribute('data-idx')));
+    });
+  });
+
+  // Fetch current prices and compute P&L
+  var totalInvested = 0, totalCurrent = 0;
+  var pending = portfolio.length;
+
+  portfolio.forEach(function(p, i) {
+    totalInvested += p.shares * p.buyPrice;
+
+    cacheGet('price_' + p.ticker, CACHE_PRICE_TTL, function(cached) {
+      function applyPfPrice(d) {
+        if (!d || !d.c || d.c === 0) { pending--; updateSummary(); return; }
+        var curPrice = d.c;
+        var invested = p.shares * p.buyPrice;
+        var current  = p.shares * curPrice;
+        var pl       = current - invested;
+        var plPct    = invested > 0 ? (pl / invested * 100) : 0;
+        var up       = pl >= 0;
+        var color    = up ? 'var(--green)' : 'var(--red)';
+        var sign     = up ? '+' : '';
+
+        var priceEl = document.getElementById('pf-price-' + i);
+        var plEl    = document.getElementById('pf-pl-' + i);
+        if (priceEl) {
+          priceEl.textContent = '$' + formatPrice(curPrice) + ' зараз';
+          priceEl.style.color = 'var(--text)';
+        }
+        if (plEl) {
+          plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.abs(pl).toFixed(0) + '</span>' +
+            '<br><span style="font-size:10px;color:' + color + '">' + sign + plPct.toFixed(1) + '%</span>';
+        }
+        totalCurrent += current;
+        pending--;
+        updateSummary();
+      }
+
+      if (cached) { applyPfPrice(cached); return; }
+      fetch(WORKER_URL + '/price?ticker=' + p.ticker)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.c && d.c > 0) cacheSet('price_' + p.ticker, d);
+          applyPfPrice(d);
+        })
+        .catch(function() { pending--; updateSummary(); });
+    });
+  });
+
+  function updateSummary() {
+    if (pending > 0) return;
+    var pl    = totalCurrent - totalInvested;
+    var plPct = totalInvested > 0 ? (pl / totalInvested * 100) : 0;
+    var up    = pl >= 0;
+    var color = up ? 'var(--green)' : 'var(--red)';
+    var sign  = up ? '+' : '';
+    summEl.style.display = 'block';
+    summEl.innerHTML = '<div class="pf-summary-row">' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + totalInvested.toFixed(0) + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + totalCurrent.toFixed(0) + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + '$' + Math.abs(pl).toFixed(0) + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
+    '</div>';
+  }
 }
 
 // ── News ──────────────────────────────────────────────────────────────────────
