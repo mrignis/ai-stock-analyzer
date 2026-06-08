@@ -1171,7 +1171,7 @@ function renderPortfolio() {
           priceEl.style.color = 'var(--text)';
         }
         if (plEl) {
-          plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.abs(pl).toFixed(0) + '</span>' +
+          plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + '</span>' +
             '<br><span style="font-size:10px;color:' + color + '">' + sign + plPct.toFixed(1) + '%</span>';
         }
         totalCurrent += current;
@@ -1199,9 +1199,9 @@ function renderPortfolio() {
     var sign  = up ? '+' : '';
     summEl.style.display = 'block';
     summEl.innerHTML = '<div class="pf-summary-row">' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + totalInvested.toFixed(0) + '</div></div>' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + totalCurrent.toFixed(0) + '</div></div>' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + '$' + Math.abs(pl).toFixed(0) + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalInvested).toLocaleString() + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalCurrent).toLocaleString() + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
     '</div>';
   }
 }
