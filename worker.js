@@ -12,6 +12,15 @@ const CORS = {
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
+// Ticker → CoinGecko ID (for candle data)
+const COINGECKO_MAP = {
+  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana',
+  'BNB': 'binancecoin', 'XRP': 'ripple', 'ADA': 'cardano',
+  'DOGE': 'dogecoin', 'DOT': 'polkadot', 'AVAX': 'avalanche-2',
+  'MATIC': 'matic-network', 'LINK': 'chainlink', 'UNI': 'uniswap',
+  'TRX': 'tron',
+};
+
 const CRYPTO_MAP = {
   'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
   'SOL': 'BINANCE:SOLUSDT', 'BNB': 'BINANCE:BNBUSDT',
@@ -78,6 +87,9 @@ export default {
       if (url.pathname === '/news' && request.method === 'GET') {
         return await handleNews(request, env);
       }
+      if (url.pathname === '/candle' && request.method === 'GET') {
+        return await handleCandle(request, env);
+      }
       return json({ error: 'Not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -85,14 +97,38 @@ export default {
   },
 };
 
+// ── Yahoo Finance price helper (fallback) ─────────────────────────────────────
+async function yahooQuote(symbol) {
+  // Crypto needs -USD suffix (BTC → BTC-USD), stocks stay as-is (SPY, TSLA)
+  try {
+    const res  = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const c  = meta.regularMarketPrice || meta.previousClose || 0;
+    const pc = meta.previousClose || meta.chartPreviousClose || c;
+    if (!c || c <= 0) return null;
+    return { c, pc };
+  } catch {
+    return null;
+  }
+}
+
+// Yahoo symbols for market cards (Finnhub uses BINANCE:BTCUSDT, Yahoo uses BTC-USD)
+const YAHOO_MARKET_SYM = { SP500:'SPY', NASDAQ:'QQQ', BTC:'BTC-USD', GOLD:'GLD' };
+
 // ── /market ───────────────────────────────────────────────────────────────────
 async function handleMarket(env) {
   const symbols = [
-    { key: 'SP500', sym: 'SPY',              label: 'S&P 500' },
-    { key: 'NASDAQ',sym: 'QQQ',              label: 'NASDAQ'  },
-    { key: 'BTC',   sym: 'BINANCE:BTCUSDT',  label: 'Bitcoin' },
-    { key: 'GOLD',  sym: 'GLD',               label: 'Gold'    },
+    { key: 'SP500', sym: 'SPY',             label: 'S&P 500' },
+    { key: 'NASDAQ',sym: 'QQQ',             label: 'NASDAQ'  },
+    { key: 'BTC',   sym: 'BINANCE:BTCUSDT', label: 'Bitcoin' },
+    { key: 'GOLD',  sym: 'GLD',             label: 'Gold'    },
   ];
+
   const results = await Promise.allSettled(
     symbols.map(s =>
       fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(s.sym)}&token=${env.FINNHUB_KEY}`)
@@ -100,28 +136,63 @@ async function handleMarket(env) {
         .then(d => ({ ...s, c: d.c, pc: d.pc }))
     )
   );
+
   const data = {};
-  results.forEach(r => {
+  // Collect which keys need Yahoo fallback
+  const needFallback = [];
+
+  results.forEach((r, i) => {
+    const s = symbols[i];
     if (r.status === 'fulfilled' && r.value.c > 0) {
       const { key, label, c, pc } = r.value;
-      data[key] = { label, c, pc, pct: ((c - pc) / pc * 100) };
+      const pct = pc > 0 ? ((c - pc) / pc * 100) : 0;
+      data[key] = { label, c, pc, pct };
+    } else {
+      // Finnhub failed or returned 0 — try Yahoo
+      needFallback.push(s);
     }
   });
+
+  // Yahoo fallback for failed cards
+  if (needFallback.length > 0) {
+    await Promise.allSettled(
+      needFallback.map(async s => {
+        const q = await yahooQuote(YAHOO_MARKET_SYM[s.key]);
+        if (q) {
+          const pct = q.pc > 0 ? ((q.c - q.pc) / q.pc * 100) : 0;
+          data[s.key] = { label: s.label, c: q.c, pc: q.pc, pct };
+        }
+      })
+    );
+  }
+
   return json(data);
 }
 
 // ── /price?ticker=TSLA ────────────────────────────────────────────────────────
 async function handlePrice(request, env) {
-  const url = new URL(request.url);
-  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
+  const url    = new URL(request.url);
+  const raw    = (url.searchParams.get('ticker') || '').toUpperCase();
   if (!raw) return json({ error: 'Missing ticker' }, 400);
   const ticker = CRYPTO_NAMES[raw] || raw;
-  const sym = CRYPTO_MAP[ticker] || ticker;
-  const res = await fetch(
+  const sym    = CRYPTO_MAP[ticker] || ticker;
+
+  // Try Finnhub first
+  const res  = await fetch(
     `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
   );
   const data = await res.json();
-  return json(data);
+
+  // If Finnhub returns valid price — use it
+  if (data.c && data.c > 0) return json(data);
+
+  // Finnhub failed — fallback to Yahoo Finance
+  const isCrypto   = !!CRYPTO_MAP[ticker];
+  const yahooSym   = isCrypto ? ticker + '-USD' : ticker;
+  const yahooData  = await yahooQuote(yahooSym);
+  if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: yahooData.pc > 0 ? ((yahooData.c - yahooData.pc) / yahooData.pc * 100) : 0 });
+
+  return json(data); // return whatever Finnhub gave even if empty
 }
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
@@ -235,6 +306,38 @@ async function handleNews(request, env) {
     return json(news);
   } catch (e) {
     return json([]);
+  }
+}
+
+// ── /candle?ticker=TSLA ───────────────────────────────────────────────────────
+async function handleCandle(request, env) {
+  const url = new URL(request.url);
+  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
+  if (!raw) return json({ error: 'Missing ticker' }, 400);
+
+  const t        = CRYPTO_NAMES[raw] || raw;
+  const isCrypto = !!CRYPTO_MAP[t];
+  // Yahoo Finance: stocks use ticker as-is (TSLA), crypto adds -USD (BTC-USD)
+  const yahooSym = isCrypto ? t + '-USD' : t;
+
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1d&range=1mo`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return json({ error: 'no_data' }, 404);
+
+    const closes = result.indicators?.quote?.[0]?.close;
+    if (!closes || closes.length < 2) return json({ error: 'no_data' }, 404);
+
+    const filtered = closes.filter(c => c !== null && c !== undefined);
+    if (filtered.length < 2) return json({ error: 'no_data' }, 404);
+
+    return json({ c: filtered });
+  } catch (e) {
+    return json({ error: e.message }, 500);
   }
 }
 

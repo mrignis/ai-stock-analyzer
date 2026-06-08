@@ -4,6 +4,7 @@
 var WORKER_URL = 'https://stock-ai-analyzer.chelb-dev.workers.dev';
 
 var lang = 'ua';
+var theme = 'dark';
 var currentTicker = '';
 var currentData = null;
 var watchlist = [];
@@ -17,13 +18,14 @@ var conversations = []; // [{id, title, messages, context}]
 var currentConvId = null;
 var convListVisible = false;
 
-function loadAll(cb) { chrome.storage.local.get(['lang','watchlist','history','conversations','currentConvId','portfolio'], cb); }
+function loadAll(cb) { chrome.storage.local.get(['lang','theme','watchlist','history','conversations','currentConvId','portfolio'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
 var CACHE_MARKET_TTL  = 5  * 60 * 1000; // 5 хв
 var CACHE_ANALYZE_TTL = 15 * 60 * 1000; // 15 хв
 var CACHE_PRICE_TTL   = 2  * 60 * 1000; // 2 хв
+var CACHE_CANDLE_TTL  = 30 * 60 * 1000; // 30 хв
 
 function cacheGet(key, ttl, cb) {
   chrome.storage.local.get('c_' + key, function(s) {
@@ -40,11 +42,13 @@ function cacheSet(key, data) {
 document.addEventListener('DOMContentLoaded', function() {
   loadAll(function(s) {
     if (s.lang) lang = s.lang;
+    if (s.theme) theme = s.theme;
     if (s.watchlist) watchlist = s.watchlist;
     if (s.history) historyList = s.history;
     if (s.conversations) conversations = s.conversations;
     if (s.currentConvId) currentConvId = s.currentConvId;
     if (s.portfolio) portfolio = s.portfolio;
+    applyTheme();
 
     // Load current conversation
     if (currentConvId) {
@@ -144,8 +148,43 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('chat-ctx-clear').addEventListener('click', clearChatContext);
     document.getElementById('btn-new-chat').addEventListener('click', newChat);
     document.getElementById('btn-conv-list').addEventListener('click', toggleConvList);
+
+    // Alerts
+    document.getElementById('btn-save-threshold').addEventListener('click', function() {
+      var val = parseInt(document.getElementById('threshold-slider').value);
+      chrome.storage.local.set({ alertThreshold: val }, function() {
+        toast(lang === 'ua' ? '✓ Поріг збережено: ' + val + '%' : '✓ Threshold saved: ' + val + '%');
+      });
+    });
+    document.getElementById('btn-check-now').addEventListener('click', function() {
+      chrome.runtime.sendMessage({ action: 'checkNow' }, function() {
+        var btn = document.getElementById('btn-check-now');
+        btn.textContent = lang === 'ua' ? '✓ Перевірено' : '✓ Checked';
+        setTimeout(function() {
+          btn.textContent = lang === 'ua' ? '↻ Перевірити' : '↻ Check now';
+          initAlerts(); // refresh list after check
+        }, 1500);
+      });
+    });
+
+    // Theme toggle
+    document.getElementById('theme-toggle').addEventListener('click', function() {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      save({ theme: theme });
+      applyTheme();
+      applyLang();
+    });
   });
 });
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+function applyTheme() {
+  if (theme === 'light') {
+    document.body.setAttribute('data-theme', 'light');
+  } else {
+    document.body.removeAttribute('data-theme');
+  }
+}
 
 // ── Lang ──────────────────────────────────────────────────────────────────────
 function applyLang() {
@@ -200,18 +239,21 @@ function applyLang() {
   }
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
-  document.getElementById('settings-how-it-works').textContent = ua
-    ? 'Розширення використовує наш хмарний сервер для AI аналізу. Твої дані не зберігаються.'
-    : 'The extension uses our cloud server for AI analysis. Your data is not stored.';
-  document.getElementById('settings-free-note').textContent = ua
-    ? '✓ Безкоштовно — ключі не потрібні. Аналіз на базі Groq Llama 3.3 + реальні дані Finnhub.'
-    : '✓ Free — no API keys needed. Powered by Groq Llama 3.3 + real-time Finnhub data.';
+  document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
   document.getElementById('news-search-btn').textContent = ua ? 'Пошук' : 'Search';
   document.getElementById('news-input').placeholder = ua ? 'TSLA, AAPL...' : 'TSLA, AAPL...';
   var newsEmptyEl = document.getElementById('lbl-news-empty');
   if (newsEmptyEl) newsEmptyEl.textContent = ua ? 'Введи тікер або вибери зі списку' : 'Enter a ticker or pick from the list';
   var stopBtn = document.getElementById('stop-btn');
   if (stopBtn) stopBtn.textContent = ua ? '✕ Стоп' : '✕ Stop';
+  var lblTheme = document.getElementById('lbl-theme');
+  if (lblTheme) lblTheme.textContent = theme === 'light'
+    ? (ua ? '☀️ Світла тема' : '☀️ Light theme')
+    : (ua ? '🌙 Темна тема' : '🌙 Dark theme');
+  var themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) themeToggle.textContent = theme === 'light'
+    ? (ua ? '🌙 Темна' : '🌙 Dark')
+    : (ua ? '☀️ Світла' : '☀️ Light');
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
@@ -246,13 +288,23 @@ function fetchMarketData() {
 
 var CARD_TICKERS = { SP500: 'SPY', NASDAQ: 'QQQ', BTC: 'BTC', GOLD: 'GLD' };
 
+var CARD_LABELS = { SP500:'S&P 500', NASDAQ:'NASDAQ', BTC:'Bitcoin', GOLD:'Gold' };
+
 function renderMarketCards(data) {
   var keys = ['SP500','NASDAQ','BTC','GOLD'];
   var icons = { SP500:'📊', NASDAQ:'💻', BTC:'₿', GOLD:'🥇' };
   var html = '';
   keys.forEach(function(k) {
     var d = data[k];
-    if (!d) return;
+    // Always render all 4 cards — show '—' if data missing
+    if (!d) {
+      html += '<div class="mcard" data-card="' + k + '" style="cursor:pointer;opacity:0.45" title="' + CARD_LABELS[k] + '">' +
+        '<div class="mcard-label">' + icons[k] + ' ' + CARD_LABELS[k] + '</div>' +
+        '<div class="mcard-price" style="color:var(--dim)">—</div>' +
+        '<div class="mcard-pct" style="color:var(--dim)">—</div>' +
+      '</div>';
+      return;
+    }
     var up = d.pct >= 0;
     var color = up ? 'var(--green)' : 'var(--red)';
     var price = d.c >= 1000
@@ -266,7 +318,7 @@ function renderMarketCards(data) {
   });
   var el = document.getElementById('market-cards');
   if (!el) return;
-  if (html) el.innerHTML = html;
+  el.innerHTML = html;
 
   // Make cards clickable
   el.querySelectorAll('.mcard').forEach(function(card) {
@@ -611,6 +663,7 @@ function finish(ticker, data) {
   addHistory(ticker, data);
   renderResult(ticker, data);
   setChatContext(ticker, data);
+  fetchRealChart(ticker, data.color);
 }
 
 function showError(msg) {
@@ -650,26 +703,113 @@ function renderResult(ticker, d) {
   var vEl = document.getElementById('r-verdict');
   vEl.textContent = d.verdict; vEl.className = 'verdict-pill ' + (pillMap[d.color] || 'pill-blue');
   var sMap = {
-    green: 'background:var(--green-dim);border:1px solid var(--green-border);color:var(--green)',
-    yellow: 'background:var(--yellow-dim);border:1px solid rgba(251,191,36,0.25);color:var(--yellow)',
-    red: 'background:var(--red-dim);border:1px solid rgba(248,113,113,0.25);color:var(--red)',
-    blue: 'background:var(--blue-dim);border:1px solid rgba(96,165,250,0.25);color:var(--blue)',
+    green:  'background:var(--green-dim);border:1px solid var(--green-border);color:var(--green)',
+    yellow: 'background:var(--yellow-dim);border:1px solid var(--yellow-border,rgba(217,119,6,0.3));color:var(--yellow)',
+    red:    'background:var(--red-dim);border:1px solid var(--red-border,rgba(220,38,38,0.3));color:var(--red)',
+    blue:   'background:var(--blue-dim);border:1px solid var(--blue-border,rgba(37,99,235,0.3));color:var(--blue)',
   };
   document.getElementById('r-conclusion-box').style.cssText = sMap[d.color] || sMap.blue;
-  drawChart(d.dir, d.color);
+  drawChartSimulated(d.dir, d.color); // placeholder until real candle data loads
   updateWatchBtn();
 }
 
-function drawChart(dir, color) {
+// ── Chart ─────────────────────────────────────────────────────────────────────
+function fetchRealChart(ticker, color) {
+  var lbl = document.getElementById('lbl-chart');
+  cacheGet('candle_' + ticker, CACHE_CANDLE_TTL, function(cached) {
+    if (cached) {
+      drawChartFromPrices(cached, color);
+      if (lbl) lbl.textContent = (lang === 'ua' ? 'Реальні дані 30д' : 'Real data 30d');
+      return;
+    }
+    fetch(WORKER_URL + '/candle?ticker=' + ticker)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.c && d.c.length >= 2) {
+          cacheSet('candle_' + ticker, d.c);
+          drawChartFromPrices(d.c, color);
+          if (lbl) lbl.textContent = (lang === 'ua' ? 'Реальні дані 30д' : 'Real data 30d');
+        } else {
+          drawChartSimulated(currentData ? currentData.dir : 'flat', color);
+          if (lbl) lbl.textContent = (lang === 'ua' ? 'Тренд (прогноз)' : 'Trend (forecast)');
+        }
+      })
+      .catch(function() {
+        drawChartSimulated(currentData ? currentData.dir : 'flat', color);
+        if (lbl) lbl.textContent = (lang === 'ua' ? 'Тренд (прогноз)' : 'Trend (forecast)');
+      });
+  });
+}
+
+function drawChartFromPrices(prices, color) {
   var canvas = document.getElementById('trend-chart');
+  if (!canvas) return;
   var ctx = canvas.getContext('2d');
-  var W = canvas.offsetWidth || 400, H = 80;
+  var W = canvas.offsetWidth || 400, H = 80, pad = 8;
+  canvas.width = W; canvas.height = H;
+
+  var min = Math.min.apply(null, prices);
+  var max = Math.max.apply(null, prices);
+  var range = max - min || 1;
+  var n = prices.length;
+
+  var pts = prices.map(function(p, i) {
+    return {
+      x: pad + (i / (n - 1)) * (W - pad * 2),
+      y: H - pad - ((p - min) / range) * (H - pad * 2)
+    };
+  });
+
+  var cMap = { green:'#4ade80', yellow:'#fbbf24', red:'#f87171', blue:'#60a5fa' };
+  var lc = cMap[color] || '#60a5fa';
+
+  // % change label
+  var ch = ((prices[n - 1] - prices[0]) / prices[0] * 100).toFixed(1);
+  var chEl = document.getElementById('chart-change');
+  if (chEl) {
+    chEl.style.color = ch >= 0 ? 'var(--green)' : 'var(--red)';
+    chEl.textContent = (ch >= 0 ? '+' : '') + ch + '%';
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  // Fill area
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, H);
+  pts.forEach(function(p) { ctx.lineTo(p.x, p.y); });
+  ctx.lineTo(pts[n - 1].x, H);
+  ctx.closePath();
+  ctx.fillStyle = lc + '22';
+  ctx.fill();
+  // Smooth line
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < pts.length; i++) {
+    var mx = (pts[i - 1].x + pts[i].x) / 2;
+    var my = (pts[i - 1].y + pts[i].y) / 2;
+    ctx.quadraticCurveTo(pts[i - 1].x, pts[i - 1].y, mx, my);
+  }
+  ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+  ctx.strokeStyle = lc;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function drawChartSimulated(dir, color) {
+  var canvas = document.getElementById('trend-chart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.offsetWidth || 400, H = 80, pad = 8;
   canvas.width = W; canvas.height = H;
   var cfgs = { up:{d:-0.6,n:2.5}, up_strong:{d:-1.1,n:3}, down:{d:0.7,n:2.5}, volatile:{d:0,n:6}, flat:{d:0,n:1.5} };
   var cfg = cfgs[dir] || cfgs.flat;
-  var pts = [], y = H / 2, pad = 8;
+  var seed = 0;
+  for (var ci = 0; ci < currentTicker.length; ci++) seed += currentTicker.charCodeAt(ci);
+  seed += dir.length * 31;
+  var s = seed;
+  function rand() { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; }
+  var pts = [], y = H / 2;
   for (var i = 0; i < 30; i++) {
-    y += cfg.d + (Math.random() - 0.5) * cfg.n * 2;
+    y += cfg.d + (rand() - 0.5) * cfg.n * 2;
     y = Math.max(pad, Math.min(H - pad, y));
     pts.push({ x: pad + (i / 29) * (W - pad * 2), y: y });
   }
@@ -790,6 +930,68 @@ function renderHistory() {
   el.innerHTML = html;
   var items = el.querySelectorAll('.hist-item');
   for (var i = 0; i < items.length; i++) { items[i].addEventListener('click', function() { document.getElementById('ticker-input').value = this.getAttribute('data-ticker'); showPanel('search'); runAnalysis(); }); }
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+function initAlerts() {
+  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'watchlist'], function(s) {
+    var threshold = s.alertThreshold || 3;
+    var priceAlerts = s.priceAlerts || {};
+    var wl = s.watchlist || [];
+
+    var slider = document.getElementById('threshold-slider');
+    var valEl  = document.getElementById('threshold-value');
+    slider.value = threshold;
+    valEl.textContent = threshold + '%';
+
+    slider.oninput = function() { valEl.textContent = this.value + '%'; };
+
+    renderAlertList(wl, priceAlerts, threshold);
+  });
+}
+
+function renderAlertList(wl, priceAlerts, threshold) {
+  var el = document.getElementById('alert-prices-list');
+  var ua = lang === 'ua';
+
+  if (!wl.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>' +
+      (ua ? 'Додай акції до Watchlist щоб отримувати алерти.' : 'Add stocks to Watchlist to receive alerts.') + '</p></div>';
+    return;
+  }
+
+  var html = '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">';
+  wl.forEach(function(item) {
+    var t = item.ticker;
+    var info = priceAlerts[t];
+    var pct = info ? info.pct : null;
+    var price = info ? info.price : null;
+    var absPct = pct !== null ? Math.abs(pct) : null;
+    var triggered = absPct !== null && absPct >= threshold;
+    var pctColor = pct === null ? 'var(--dim)' : pct >= 0 ? 'var(--green)' : 'var(--red)';
+    var pctStr = pct === null ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+    var priceStr = price ? '$' + (price >= 1000 ? price.toLocaleString('en-US', {maximumFractionDigits:2}) : price < 1 ? price.toFixed(5) : price.toFixed(2)) : '—';
+    var lastChecked = info && info.time ? timeAgoAlerts(info.time) : (ua ? 'не перевірялось' : 'not checked');
+
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:var(--r);' +
+      (triggered ? 'border:1px solid ' + (pct >= 0 ? 'var(--green-border)' : 'var(--red-border,rgba(220,38,38,0.35))') + ';' : '') + '">' +
+      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--green);min-width:70px">' + t + '</span>' +
+      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text);flex:1">' + priceStr + '</span>' +
+      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:' + pctColor + ';min-width:70px;text-align:right">' + pctStr + '</span>' +
+      (triggered ? '<span style="font-size:14px">' + (pct >= 0 ? '📈' : '📉') + '</span>' : '') +
+      '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);padding:0 10px 4px">' + lastChecked + '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function timeAgoAlerts(ts) {
+  var diff = Math.floor((Date.now() - ts) / 60000);
+  var ua = lang === 'ua';
+  if (diff < 1)  return ua ? 'щойно' : 'just now';
+  if (diff < 60) return diff + (ua ? ' хв тому' : 'm ago');
+  return Math.floor(diff / 60) + (ua ? ' год тому' : 'h ago');
 }
 
 function toast(msg) {

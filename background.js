@@ -23,7 +23,7 @@ function fetchPrice(ticker, cb) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.c || d.c === 0) { cb(null); return; }
-      var pct = ((d.c - d.pc) / d.pc) * 100;
+      var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc) * 100 : 0;
       cb({ price: d.c, pct: pct });
     })
     .catch(function() { cb(null); });

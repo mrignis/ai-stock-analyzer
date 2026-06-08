@@ -17,6 +17,20 @@
   --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
   --r:8px;--r-lg:12px;
 }
+[data-theme="light"]{
+  --bg:#e4dfd8;--surface:#f5f2ee;--surface2:#d9d4cc;--surface3:#cac4bb;
+  --border:rgba(0,0,0,0.10);--border2:rgba(0,0,0,0.20);
+  --text:#0a0c10;--muted:#2d3748;--dim:#4a5568;
+  --green:#16a34a;--green-dim:rgba(22,163,74,0.12);--green-border:rgba(22,163,74,0.45);
+  --red:#dc2626;--red-dim:rgba(220,38,38,0.10);
+  --yellow:#c2780a;--yellow-dim:rgba(194,120,10,0.10);
+  --blue:#2563eb;--blue-dim:rgba(37,99,235,0.10);
+}
+[data-theme="light"] .verdict-pill{border:1px solid transparent}
+[data-theme="light"] .pill-green{border-color:rgba(22,163,74,0.45)}
+[data-theme="light"] .pill-yellow{border-color:rgba(194,120,10,0.40)}
+[data-theme="light"] .pill-red{border-color:rgba(220,38,38,0.38)}
+[data-theme="light"] .pill-blue{border-color:rgba(37,99,235,0.38)}
 body{width:440px;min-height:520px;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
 .nav{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);gap:6px}
 .nav-logo{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:0.12em;flex:1}
@@ -56,7 +70,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .price-box{display:none;align-items:center;flex-wrap:wrap;gap:6px;background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;border:1px solid var(--border2)}
 .result-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
 .ticker-big{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--green);letter-spacing:0.08em}
-.verdict-pill{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;letter-spacing:0.06em}
+.verdict-pill{font-family:var(--mono);font-size:10px;font-weight:500;padding:3px 10px;border-radius:20px;letter-spacing:0.06em}
 .pill-green{background:var(--green-dim);color:var(--green)}
 .pill-yellow{background:var(--yellow-dim);color:var(--yellow)}
 .pill-red{background:var(--red-dim);color:var(--red)}
@@ -92,8 +106,8 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .watch-remove:hover{color:var(--red)}
 .hist-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r);cursor:pointer;transition:background 0.15s}
 .hist-item:hover{background:var(--surface2)}
-.hist-ticker{font-family:var(--mono);font-size:12px;color:var(--green);width:50px}
-.hist-time{font-family:var(--mono);font-size:10px;color:var(--dim);flex:1}
+.hist-ticker{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--green);min-width:90px}
+.hist-time{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--dim);flex:1}
 .clear-btn{font-size:10px;font-family:var(--mono);background:transparent;border:1px solid var(--border2);color:var(--dim);border-radius:var(--r);padding:3px 8px;cursor:pointer}
 .clear-btn:hover{border-color:var(--red);color:var(--red)}
 /* Settings */
@@ -314,12 +328,14 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
     <!-- Add position form -->
     <div style="background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;border:1px solid var(--border2)">
       <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px" id="lbl-add-position">Додати позицію</div>
-      <div style="display:flex;gap:5px;margin-bottom:6px">
-        <input type="text" id="pf-ticker" maxlength="10" placeholder="TSLA" style="width:70px;flex:none"/>
-        <input type="text" inputmode="decimal" id="pf-shares" placeholder="Акцій" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none;text-transform:none;letter-spacing:0"/>
-        <input type="text" inputmode="decimal" id="pf-buyprice" placeholder="Ціна $" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none;text-transform:none;letter-spacing:0"/>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input type="text" id="pf-ticker" maxlength="10" placeholder="TSLA" style="width:80px;flex:none;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none;letter-spacing:0.06em;text-transform:uppercase"/>
+        <input type="text" inputmode="decimal" id="pf-shares" placeholder="Акцій" style="flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none;letter-spacing:0"/>
       </div>
-      <button class="btn-green" id="pf-add-btn" style="width:100%;height:32px;font-size:12px" id="lbl-pf-add">+ Додати</button>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input type="text" inputmode="decimal" id="pf-buyprice" placeholder="Ціна купівлі $" style="flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:0 8px;height:36px;outline:none;letter-spacing:0"/>
+        <button class="btn-green" id="pf-add-btn" style="width:90px;flex:none;height:36px;font-size:12px">+ Додати</button>
+      </div>
     </div>
 
     <!-- Positions list -->
@@ -402,19 +418,15 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 
 <!-- SETTINGS -->
 <div class="panel" id="panel-settings">
-  <div class="info-box info-green" style="margin-bottom:16px">
-    <p id="settings-free-note">✓ Безкоштовно — ключі не потрібні. Аналіз на базі Groq Llama 3.3 + реальні дані Finnhub.</p>
-  </div>
 
-  <div class="setup-box">
-    <p id="settings-how-it-works" style="margin-bottom:0">Розширення використовує наш хмарний сервер для AI аналізу. Твої дані не зберігаються.</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;margin-bottom:6px">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="lbl-theme">🌙 Темна тема</span>
+    <button id="theme-toggle" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 14px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer;transition:all 0.2s">☀️ Світла</button>
   </div>
 
   <div class="divider"></div>
 
-  <div class="info-box info-blue">
-    <p id="settings-version">AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub</p>
-  </div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-top:10px" id="settings-version">AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub</div>
 </div>
 
 <script src="popup.js"></script>
