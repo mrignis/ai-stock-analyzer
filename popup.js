@@ -1090,8 +1090,8 @@ function savePortfolio() { save({ portfolio: portfolio }); }
 
 function addPortfolioPosition() {
   var ticker   = document.getElementById('pf-ticker').value.trim().toUpperCase();
-  var shares   = parseFloat(document.getElementById('pf-shares').value);
-  var buyPrice = parseFloat(document.getElementById('pf-buyprice').value);
+  var shares   = parseFloat(document.getElementById('pf-shares').value.replace(',', '.'));
+  var buyPrice = parseFloat(document.getElementById('pf-buyprice').value.replace(',', '.'));
   if (!ticker || isNaN(shares) || shares <= 0 || isNaN(buyPrice) || buyPrice <= 0) {
     toast(lang === 'ua' ? '⚠ Заповни всі поля' : '⚠ Fill all fields');
     return;
