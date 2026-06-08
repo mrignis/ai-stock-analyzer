@@ -1131,13 +1131,13 @@ function renderNews(ticker, articles) {
   listEl.style.display  = 'flex';
 
   var html = '';
-  articles.forEach(function(n) {
+  articles.forEach(function(n, i) {
     var ago = timeAgoNews(n.datetime);
     var src = n.source ? escHtml(n.source) : '—';
     var headline = escHtml(n.headline || '');
     var summary  = n.summary ? escHtml(n.summary) : '';
-    var href = n.url ? ' onclick="window.open(\'' + n.url.replace(/'/g, "\\'") + '\',\'_blank\')" style="cursor:pointer"' : '';
-    html += '<div class="news-item"' + href + '>' +
+    var clickable = n.url ? ' data-url="' + escHtml(n.url) + '" style="cursor:pointer"' : '';
+    html += '<div class="news-item"' + clickable + ' data-idx="' + i + '">' +
       '<div class="news-meta"><span>' + src + '</span><span>' + ago + '</span></div>' +
       '<div class="news-headline">' + headline + '</div>' +
       (summary ? '<div class="news-summary">' + summary + '</div>' : '') +
@@ -1145,6 +1145,13 @@ function renderNews(ticker, articles) {
     '</div>';
   });
   listEl.innerHTML = html;
+
+  // Attach click handlers via JS (CSP forbids inline onclick in extensions)
+  listEl.querySelectorAll('.news-item[data-url]').forEach(function(item) {
+    item.addEventListener('click', function() {
+      chrome.tabs.create({ url: this.getAttribute('data-url') });
+    });
+  });
 }
 
 function timeAgoNews(ts) {
