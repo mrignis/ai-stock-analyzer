@@ -31,7 +31,11 @@
 [data-theme="light"] .pill-yellow{border-color:rgba(194,120,10,0.40)}
 [data-theme="light"] .pill-red{border-color:rgba(220,38,38,0.38)}
 [data-theme="light"] .pill-blue{border-color:rgba(37,99,235,0.38)}
-body{width:440px;min-height:520px;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+body{width:440px;min-height:520px;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
+body::-webkit-scrollbar{display:none}
+/* Tab mode — full page, same background as app */
+html.tab-mode{background:var(--bg);min-height:100vh}
+body.tab-mode{width:100%;max-width:560px;min-height:100vh;margin:0 auto;border-radius:0;box-shadow:none}
 .nav{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);gap:6px}
 .nav-logo{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:0.12em;flex:1}
 .nav-tabs{display:flex;gap:2px}
@@ -422,6 +426,13 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;margin-bottom:6px">
     <span style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="lbl-theme">🌙 Темна тема</span>
     <button id="theme-toggle" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 14px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer;transition:all 0.2s">☀️ Світла</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;margin-bottom:6px">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="lbl-pin">📌 Відкрити у вікні</span>
+    <button id="btn-pin-tab" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 14px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer;transition:all 0.2s" id="btn-pin-tab">↗ Відкрити</button>
   </div>
 
   <div class="divider"></div>

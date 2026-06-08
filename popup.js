@@ -5,6 +5,7 @@ var WORKER_URL = 'https://stock-ai-analyzer.chelb-dev.workers.dev';
 
 var lang = 'ua';
 var theme = 'dark';
+var isTabMode = (new URLSearchParams(window.location.search).get('tab') === '1');
 var currentTicker = '';
 var currentData = null;
 var watchlist = [];
@@ -43,6 +44,11 @@ document.addEventListener('DOMContentLoaded', function() {
   loadAll(function(s) {
     if (s.lang) lang = s.lang;
     if (s.theme) theme = s.theme;
+    // Apply tab mode class so CSS centers the card
+    if (isTabMode) {
+      document.documentElement.classList.add('tab-mode');
+      document.body.classList.add('tab-mode');
+    }
     if (s.watchlist) watchlist = s.watchlist;
     if (s.history) historyList = s.history;
     if (s.conversations) conversations = s.conversations;
@@ -167,6 +173,17 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
+    // Pin as floating window
+    document.getElementById('btn-pin-tab').addEventListener('click', function() {
+      chrome.windows.create({
+        url: chrome.runtime.getURL('popup.html'),
+        type: 'popup',
+        width: 460,
+        height: 680,
+        focused: true,
+      }, function() { window.close(); });
+    });
+
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', function() {
       theme = theme === 'dark' ? 'light' : 'dark';
@@ -181,8 +198,10 @@ document.addEventListener('DOMContentLoaded', function() {
 function applyTheme() {
   if (theme === 'light') {
     document.body.setAttribute('data-theme', 'light');
+    document.documentElement.setAttribute('data-theme', 'light');
   } else {
     document.body.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-theme');
   }
 }
 
@@ -240,6 +259,10 @@ function applyLang() {
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
   document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
+  var lblPin = document.getElementById('lbl-pin');
+  if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in tab';
+  var btnPin = document.getElementById('btn-pin-tab');
+  if (btnPin) btnPin.textContent = ua ? '↗ Відкрити' : '↗ Open';
   document.getElementById('news-search-btn').textContent = ua ? 'Пошук' : 'Search';
   document.getElementById('news-input').placeholder = ua ? 'TSLA, AAPL...' : 'TSLA, AAPL...';
   var newsEmptyEl = document.getElementById('lbl-news-empty');

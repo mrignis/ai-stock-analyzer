@@ -3,7 +3,7 @@
   "name": "AI Stock Analyzer",
   "version": "2.0",
   "description": "AI аналіз акцій на базі Gemini — безкоштовно, без ключів",
-  "permissions": ["storage", "alarms", "notifications", "tabs"],
+  "permissions": ["storage", "alarms", "notifications", "tabs", "windows"],
   "host_permissions": [
     "https://stock-ai-analyzer.chelb-dev.workers.dev/*"
   ],
