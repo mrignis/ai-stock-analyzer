@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <title>AI Stock Analyzer</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
+/* Locally bundled fonts — no external CDN requests (MV3 safe) */
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/dm-mono-400.woff2') format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/dm-mono-500.woff2') format('woff2')}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:400 600;font-display:swap;src:url('fonts/dm-sans.woff2') format('woff2')}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0e0f11;--surface:#16181c;--surface2:#1e2126;--surface3:#252830;
