@@ -36,39 +36,52 @@ function checkPrices() {
     var threshold = s.alertThreshold || 3;
     if (!watchlist.length) return;
 
+    var pending = watchlist.length;
+    var alertsToFire = []; // collect alerts — fire only after all fetches done
+
     watchlist.forEach(function(item) {
       var ticker = item.ticker;
       fetchPrice(ticker, function(info) {
-        if (!info) return;
-        var lastPrice = savedPrices[ticker];
-        var now = Date.now();
-        savedPrices[ticker] = { price: info.price, pct: info.pct, time: now };
-        chrome.storage.local.set({ priceAlerts: savedPrices });
+        if (info) {
+          var lastPrice = savedPrices[ticker];
+          var now = Date.now();
+          savedPrices[ticker] = { price: info.price, pct: info.pct, time: now };
 
-        var shouldAlert = false;
-        var reason = '';
+          var shouldAlert = false;
+          var reason = '';
 
-        if (Math.abs(info.pct) >= threshold) {
-          shouldAlert = true;
-          reason = (info.pct > 0 ? '📈' : '📉') + ' ' + ticker + ' ' + (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% за день. $' + info.price.toFixed(2);
-        }
-
-        if (lastPrice && !shouldAlert) {
-          var ch = ((info.price - lastPrice.price) / lastPrice.price) * 100;
-          if (Math.abs(ch) >= threshold) {
+          if (Math.abs(info.pct) >= threshold) {
             shouldAlert = true;
-            reason = (ch > 0 ? '📈' : '📉') + ' ' + ticker + ' ' + (ch > 0 ? '+' : '') + ch.toFixed(1) + '% з останньої перевірки. $' + info.price.toFixed(2);
+            reason = (info.pct > 0 ? '📈' : '📉') + ' ' + ticker + ' ' +
+              (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% за день. $' + info.price.toFixed(2);
           }
+
+          if (lastPrice && !shouldAlert) {
+            var ch = ((info.price - lastPrice.price) / lastPrice.price) * 100;
+            if (Math.abs(ch) >= threshold) {
+              shouldAlert = true;
+              reason = (ch > 0 ? '📈' : '📉') + ' ' + ticker + ' ' +
+                (ch > 0 ? '+' : '') + ch.toFixed(1) + '% з останньої перевірки. $' + info.price.toFixed(2);
+            }
+          }
+
+          if (shouldAlert) alertsToFire.push({ ticker: ticker, reason: reason });
         }
 
-        if (shouldAlert) {
-          // Use stable ID per ticker so Chrome replaces the old notification instead of stacking them
-          chrome.notifications.create('alert_' + ticker, {
-            type: 'basic',
-            iconUrl: 'icons/icon128.png',
-            title: '📊 AI Stocks — ' + ticker,
-            message: reason,
-            priority: 2,
+        pending--;
+        if (pending === 0) {
+          // Single batched storage write after ALL fetches complete
+          chrome.storage.local.set({ priceAlerts: savedPrices });
+          // Fire all collected notifications
+          alertsToFire.forEach(function(a) {
+            // Stable ID per ticker — Chrome replaces old notification instead of stacking
+            chrome.notifications.create('alert_' + a.ticker, {
+              type: 'basic',
+              iconUrl: 'icons/icon128.png',
+              title: '📊 AI Stocks — ' + a.ticker,
+              message: a.reason,
+              priority: 2,
+            });
           });
         }
       });

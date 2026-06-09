@@ -28,6 +28,21 @@ var CACHE_ANALYZE_TTL = 15 * 60 * 1000; // 15 хв
 var CACHE_PRICE_TTL   = 2  * 60 * 1000; // 2 хв
 var CACHE_CANDLE_TTL  = 30 * 60 * 1000; // 30 хв
 
+// Remove stale cache entries to prevent chrome.storage.local from filling up
+function cachePrune() {
+  chrome.storage.local.get(null, function(all) {
+    var toRemove = [];
+    var now = Date.now();
+    var maxAge = CACHE_ANALYZE_TTL * 8; // keep entries up to 2h max
+    Object.keys(all).forEach(function(k) {
+      if (k.startsWith('c_') && all[k] && all[k].t && (now - all[k].t) > maxAge) {
+        toRemove.push(k);
+      }
+    });
+    if (toRemove.length) chrome.storage.local.remove(toRemove);
+  });
+}
+
 function cacheGet(key, ttl, cb) {
   chrome.storage.local.get('c_' + key, function(s) {
     var e = s['c_' + key];
@@ -55,6 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.currentConvId) currentConvId = s.currentConvId;
     if (s.portfolio) portfolio = s.portfolio;
     applyTheme();
+    cachePrune(); // clean up stale cache entries on each startup
 
     // Load current conversation
     if (currentConvId) {
@@ -155,7 +171,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-new-chat').addEventListener('click', newChat);
     document.getElementById('btn-conv-list').addEventListener('click', toggleConvList);
 
-    // Alerts
+    // Alerts — slider live update
+    document.getElementById('threshold-slider').addEventListener('input', function() {
+      document.getElementById('threshold-value').textContent = this.value + '%';
+    });
     document.getElementById('btn-save-threshold').addEventListener('click', function() {
       var val = parseInt(document.getElementById('threshold-slider').value);
       chrome.storage.local.set({ alertThreshold: val }, function() {
@@ -263,7 +282,7 @@ function applyLang() {
   if (convListVisible) renderConvList();
   document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
   var lblPin = document.getElementById('lbl-pin');
-  if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in tab';
+  if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in window';
   var btnPin = document.getElementById('btn-pin-tab');
   if (btnPin) btnPin.textContent = ua ? '↗ Відкрити' : '↗ Open';
   document.getElementById('news-search-btn').textContent = ua ? 'Пошук' : 'Search';
@@ -299,9 +318,8 @@ function showPanel(id) {
 
 // ── Market Overview ───────────────────────────────────────────────────────────
 function fetchMarketData() {
-  // Show cached data instantly, then refresh in background
   cacheGet('market', CACHE_MARKET_TTL, function(cached) {
-    if (cached) renderMarketCards(cached);
+    if (cached) { renderMarketCards(cached); return; } // cache fresh — skip network
     fetch(WORKER_URL + '/market')
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -730,11 +748,14 @@ function renderResult(ticker, d) {
   vEl.textContent = d.verdict; vEl.className = 'verdict-pill ' + (pillMap[d.color] || 'pill-blue');
   var sMap = {
     green:  'background:var(--green-dim);border:1px solid var(--green-border);color:var(--green)',
-    yellow: 'background:var(--yellow-dim);border:1px solid var(--yellow-border,rgba(217,119,6,0.3));color:var(--yellow)',
-    red:    'background:var(--red-dim);border:1px solid var(--red-border,rgba(220,38,38,0.3));color:var(--red)',
-    blue:   'background:var(--blue-dim);border:1px solid var(--blue-border,rgba(37,99,235,0.3));color:var(--blue)',
+    yellow: 'background:var(--yellow-dim);border:1px solid var(--yellow-border);color:var(--yellow)',
+    red:    'background:var(--red-dim);border:1px solid var(--red-border);color:var(--red)',
+    blue:   'background:var(--blue-dim);border:1px solid var(--blue-border);color:var(--blue)',
   };
-  document.getElementById('r-conclusion-box').style.cssText = sMap[d.color] || sMap.blue;
+  var colorStyle = sMap[d.color] || sMap.blue;
+  document.getElementById('r-conclusion-box').style.cssText = colorStyle;
+  // Forecast block also matches verdict color (was hardcoded green before)
+  document.getElementById('r-forecast-box').style.cssText = colorStyle;
   drawChartSimulated(d.dir, d.color); // placeholder until real candle data loads
   updateWatchBtn();
 }
@@ -791,10 +812,11 @@ function drawChartFromPrices(prices, color) {
 
   // % change label
   var ch = ((prices[n - 1] - prices[0]) / prices[0] * 100).toFixed(1);
+  var chNum = parseFloat(ch);
   var chEl = document.getElementById('chart-change');
   if (chEl) {
-    chEl.style.color = ch >= 0 ? 'var(--green)' : 'var(--red)';
-    chEl.textContent = (ch >= 0 ? '+' : '') + ch + '%';
+    chEl.style.color = chNum >= 0 ? 'var(--green)' : 'var(--red)';
+    chEl.textContent = (chNum >= 0 ? '+' : '') + ch + '%';
   }
 
   ctx.clearRect(0, 0, W, H);
@@ -842,9 +864,10 @@ function drawChartSimulated(dir, color) {
   var cMap = { green:'#4ade80', yellow:'#fbbf24', red:'#f87171', blue:'#60a5fa' };
   var lc = cMap[color] || '#60a5fa';
   var ch = (((pts[29].y - pts[0].y) / pts[0].y) * -100).toFixed(1);
+  var chNum = parseFloat(ch);
   var chEl = document.getElementById('chart-change');
-  chEl.style.color = ch >= 0 ? 'var(--green)' : 'var(--red)';
-  chEl.textContent = (ch >= 0 ? '+' : '') + ch + '%';
+  chEl.style.color = chNum >= 0 ? 'var(--green)' : 'var(--red)';
+  chEl.textContent = (chNum >= 0 ? '+' : '') + ch + '%';
   ctx.clearRect(0, 0, W, H);
   ctx.beginPath(); ctx.moveTo(pts[0].x, H);
   for (var i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -950,7 +973,10 @@ function renderHistory() {
   for (var i = 0; i < historyList.length; i++) {
     var h = historyList[i]; var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[h.color] || 'pill-blue';
     var diff = Math.floor((Date.now() - h.t) / 60000);
-    var time = diff < 1 ? (lang === 'ua' ? 'Щойно' : 'Just now') : diff < 60 ? diff + (lang === 'ua' ? ' хв' : 'm ago') : Math.floor(diff / 60) + (lang === 'ua' ? ' год' : 'h ago');
+    var time = diff < 1    ? (lang === 'ua' ? 'Щойно' : 'Just now')
+             : diff < 60   ? diff + (lang === 'ua' ? ' хв' : 'm ago')
+             : diff < 1440 ? Math.floor(diff / 60) + (lang === 'ua' ? ' год' : 'h ago')
+             : Math.floor(diff / 1440) + (lang === 'ua' ? ' д' : 'd ago');
     html += '<div class="hist-item" data-ticker="' + h.ticker + '"><span class="hist-ticker">' + h.ticker + '</span><span class="hist-time">' + time + '</span><span class="verdict-pill ' + pill + '">' + normalizeVerdict(h.verdict || '', lang) + '</span></div>';
   }
   el.innerHTML = html;
@@ -963,9 +989,10 @@ function renderHistory() {
 function timeAgoAlerts(ts) {
   var diff = Math.floor((Date.now() - ts) / 60000);
   var ua = lang === 'ua';
-  if (diff < 1)  return ua ? 'щойно' : 'just now';
-  if (diff < 60) return diff + (ua ? ' хв тому' : 'm ago');
-  return Math.floor(diff / 60) + (ua ? ' год тому' : 'h ago');
+  if (diff < 1)    return ua ? 'щойно' : 'just now';
+  if (diff < 60)   return diff + (ua ? ' хв тому' : 'm ago');
+  if (diff < 1440) return Math.floor(diff / 60) + (ua ? ' год тому' : 'h ago');
+  return Math.floor(diff / 1440) + (ua ? ' д тому' : 'd ago');
 }
 
 function toast(msg) {
@@ -1047,7 +1074,7 @@ function renderConvList() {
     var ago = timeSince(c.date);
     var isCurrent = c.id === currentConvId;
     html += '<div class="conv-item' + (isCurrent ? ' current' : '') + '" data-id="' + c.id + '">' +
-      '<div class="conv-info"><div class="conv-title">' + escHtml(c.title) + '</div><div class="conv-date">' + ago + ' · ' + c.messages.length + ' повід.</div></div>' +
+      '<div class="conv-info"><div class="conv-title">' + escHtml(c.title) + '</div><div class="conv-date">' + ago + ' · ' + c.messages.length + (lang === 'ua' ? ' повід.' : ' msg') + '</div></div>' +
       '<button class="conv-del" data-id="' + c.id + '">🗑</button>' +
     '</div>';
   });
@@ -1201,8 +1228,9 @@ function sendChat() {
       if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
       saveCurrentConv();
     })
-    .catch(function() {
+    .catch(function(e) {
       typingEl.remove();
+      if (e && e.name === 'AbortError') return;
       appendChatMsg('ai', lang === 'ua' ? '⚠ Помилка зв\'язку.' : '⚠ Connection error.');
     });
 }
@@ -1329,13 +1357,14 @@ function renderPortfolio() {
   // Fetch current prices and compute P&L
   var totalInvested = 0, totalCurrent = 0;
   var pending = portfolio.length;
+  var failed  = 0;
 
   portfolio.forEach(function(p, i) {
     totalInvested += p.shares * p.buyPrice;
 
     cacheGet('price_' + p.ticker, CACHE_PRICE_TTL, function(cached) {
       function applyPfPrice(d) {
-        if (!d || !d.c || d.c === 0) { pending--; updateSummary(); return; }
+        if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
         var curPrice = d.c;
         var invested = p.shares * p.buyPrice;
         var current  = p.shares * curPrice;
@@ -1348,7 +1377,7 @@ function renderPortfolio() {
         var priceEl = document.getElementById('pf-price-' + i);
         var plEl    = document.getElementById('pf-pl-' + i);
         if (priceEl) {
-          priceEl.textContent = '$' + formatPrice(curPrice) + ' зараз';
+          priceEl.textContent = '$' + formatPrice(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
           priceEl.style.color = 'var(--text)';
         }
         if (plEl) {
@@ -1378,12 +1407,16 @@ function renderPortfolio() {
     var up    = pl >= 0;
     var color = up ? 'var(--green)' : 'var(--red)';
     var sign  = up ? '+' : '';
+    var partial = failed > 0
+      ? '<div style="font-family:var(--mono);font-size:9px;color:var(--yellow);text-align:center;margin-top:6px">' +
+        (lang === 'ua' ? '⚠ ' + failed + ' ціни не завантажились' : '⚠ ' + failed + ' prices unavailable') + '</div>'
+      : '';
     summEl.style.display = 'block';
     summEl.innerHTML = '<div class="pf-summary-row">' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalInvested).toLocaleString() + '</div></div>' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalCurrent).toLocaleString() + '</div></div>' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
-    '</div>';
+    '</div>' + partial;
   }
 }
 
