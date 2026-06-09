@@ -31,19 +31,33 @@ const CRYPTO_NAMES = {
 };
 
 async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
-  const res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + env.GROQ_KEY,
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
+  // 25s timeout — Cloudflare Worker free tier limit is 30s wall-clock
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+
+  let res;
+  try {
+    res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + env.GROQ_KEY,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('Groq timeout — спробуй ще раз / try again');
+    throw e;
+  }
+  clearTimeout(timer);
+
   const data = await res.json();
   if (data.error) throw new Error('Groq: ' + data.error.message);
   const text = data.choices?.[0]?.message?.content || '';
