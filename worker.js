@@ -12,15 +12,6 @@ const CORS = {
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-// Ticker → CoinGecko ID (for candle data)
-const COINGECKO_MAP = {
-  'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana',
-  'BNB': 'binancecoin', 'XRP': 'ripple', 'ADA': 'cardano',
-  'DOGE': 'dogecoin', 'DOT': 'polkadot', 'AVAX': 'avalanche-2',
-  'MATIC': 'matic-network', 'LINK': 'chainlink', 'UNI': 'uniswap',
-  'TRX': 'tron',
-};
-
 const CRYPTO_MAP = {
   'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
   'SOL': 'BINANCE:SOLUSDT', 'BNB': 'BINANCE:BNBUSDT',
@@ -376,8 +367,8 @@ async function handleChat(request, env) {
       .filter(r => r.status === 'fulfilled' && r.value.d.c > 0)
       .map(r => {
         const { ticker, d } = r.value;
-        const pct = ((d.c - d.pc) / d.pc * 100).toFixed(2);
-        return `${ticker}: $${d.c} (${pct > 0 ? '+' : ''}${pct}% today)`;
+        const pct = (d.pc > 0 ? ((d.c - d.pc) / d.pc * 100) : 0).toFixed(2);
+        return `${ticker}: $${d.c} (${Number(pct) > 0 ? '+' : ''}${pct}% today)`;
       });
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
   }

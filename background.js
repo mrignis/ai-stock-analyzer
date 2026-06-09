@@ -62,7 +62,8 @@ function checkPrices() {
         }
 
         if (shouldAlert) {
-          chrome.notifications.create('alert_' + ticker + '_' + now, {
+          // Use stable ID per ticker so Chrome replaces the old notification instead of stacking them
+          chrome.notifications.create('alert_' + ticker, {
             type: 'basic',
             iconUrl: 'icons/icon128.png',
             title: '📊 AI Stocks — ' + ticker,

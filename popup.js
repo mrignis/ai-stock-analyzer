@@ -168,7 +168,10 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.textContent = lang === 'ua' ? '✓ Перевірено' : '✓ Checked';
         setTimeout(function() {
           btn.textContent = lang === 'ua' ? '↻ Перевірити' : '↻ Check now';
-          initAlerts(); // refresh list after check
+          // Refresh alert list without re-registering event listeners
+          chrome.storage.local.get(['priceAlerts'], function(s) {
+            renderAlertPrices(s.priceAlerts || {});
+          });
         }, 1500);
       });
     });
@@ -394,7 +397,7 @@ function renderHomeWatchlist() {
       var priceEl = document.getElementById('hwp-' + w.ticker);
       var pctEl   = document.getElementById('hwpc-' + w.ticker);
       if (!priceEl || !pctEl) return;
-      var pct = ((d.c - d.pc) / d.pc * 100);
+      var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
       var up = pct >= 0;
       priceEl.textContent = '$' + formatPrice(d.c);
       priceEl.style.color = 'var(--text)';
@@ -916,7 +919,7 @@ function renderWatchlist() {
       var priceEl = document.getElementById('wp-' + w.ticker);
       var pctEl   = document.getElementById('wpc-' + w.ticker);
       if (!priceEl || !pctEl) return;
-      var pct = ((d.c - d.pc) / d.pc * 100);
+      var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
       var up = pct >= 0;
       priceEl.textContent = '$' + formatPrice(d.c);
       priceEl.style.color = 'var(--text)';
@@ -956,58 +959,6 @@ function renderHistory() {
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
-function initAlerts() {
-  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'watchlist'], function(s) {
-    var threshold = s.alertThreshold || 3;
-    var priceAlerts = s.priceAlerts || {};
-    var wl = s.watchlist || [];
-
-    var slider = document.getElementById('threshold-slider');
-    var valEl  = document.getElementById('threshold-value');
-    slider.value = threshold;
-    valEl.textContent = threshold + '%';
-
-    slider.oninput = function() { valEl.textContent = this.value + '%'; };
-
-    renderAlertList(wl, priceAlerts, threshold);
-  });
-}
-
-function renderAlertList(wl, priceAlerts, threshold) {
-  var el = document.getElementById('alert-prices-list');
-  var ua = lang === 'ua';
-
-  if (!wl.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>' +
-      (ua ? 'Додай акції до Watchlist щоб отримувати алерти.' : 'Add stocks to Watchlist to receive alerts.') + '</p></div>';
-    return;
-  }
-
-  var html = '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">';
-  wl.forEach(function(item) {
-    var t = item.ticker;
-    var info = priceAlerts[t];
-    var pct = info ? info.pct : null;
-    var price = info ? info.price : null;
-    var absPct = pct !== null ? Math.abs(pct) : null;
-    var triggered = absPct !== null && absPct >= threshold;
-    var pctColor = pct === null ? 'var(--dim)' : pct >= 0 ? 'var(--green)' : 'var(--red)';
-    var pctStr = pct === null ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-    var priceStr = price ? '$' + (price >= 1000 ? price.toLocaleString('en-US', {maximumFractionDigits:2}) : price < 1 ? price.toFixed(5) : price.toFixed(2)) : '—';
-    var lastChecked = info && info.time ? timeAgoAlerts(info.time) : (ua ? 'не перевірялось' : 'not checked');
-
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:var(--r);' +
-      (triggered ? 'border:1px solid ' + (pct >= 0 ? 'var(--green-border)' : 'var(--red-border,rgba(220,38,38,0.35))') + ';' : '') + '">' +
-      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--green);min-width:70px">' + t + '</span>' +
-      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text);flex:1">' + priceStr + '</span>' +
-      '<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:' + pctColor + ';min-width:70px;text-align:right">' + pctStr + '</span>' +
-      (triggered ? '<span style="font-size:14px">' + (pct >= 0 ? '📈' : '📉') + '</span>' : '') +
-      '</div>' +
-      '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);padding:0 10px 4px">' + lastChecked + '</div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
 
 function timeAgoAlerts(ts) {
   var diff = Math.floor((Date.now() - ts) / 60000);
@@ -1257,8 +1208,13 @@ function sendChat() {
 }
 
 function renderChatText(text) {
-  // Strip leftover markdown symbols and render line breaks as paragraphs
-  var clean = text
+  // Escape HTML first to prevent XSS, then strip markdown, then render line breaks
+  var safe = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  var clean = safe
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/#+\s*/g, '')
@@ -1546,26 +1502,6 @@ function initAlerts() {
     document.getElementById('threshold-slider').value = threshold;
     document.getElementById('threshold-value').textContent = threshold + '%';
     renderAlertPrices(s.priceAlerts || {});
-  });
-
-  document.getElementById('threshold-slider').addEventListener('input', function() {
-    document.getElementById('threshold-value').textContent = this.value + '%';
-  });
-
-  document.getElementById('btn-save-threshold').addEventListener('click', function() {
-    var val = parseInt(document.getElementById('threshold-slider').value);
-    chrome.storage.local.set({ alertThreshold: val });
-    toast(lang === 'ua' ? '✓ Поріг збережено!' : '✓ Threshold saved!');
-  });
-
-  document.getElementById('btn-check-now').addEventListener('click', function() {
-    chrome.runtime.sendMessage({ action: 'checkNow' });
-    toast(lang === 'ua' ? 'Перевіряю ціни...' : 'Checking prices...');
-    setTimeout(function() {
-      chrome.storage.local.get(['priceAlerts'], function(s) {
-        renderAlertPrices(s.priceAlerts || {});
-      });
-    }, 5000);
   });
 }
 
