@@ -473,8 +473,9 @@ function runAnalysis() {
   cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
-      // Fetch a fresh price (respects 2-min price TTL) — do NOT seed price cache
-      // with the potentially stale _quote from the 15-min analysis cache
+      // Show cached price immediately (instant UX — stale-while-revalidate)
+      if (cached._quote && cached._quote.c > 0) renderPrice(cached._quote);
+      // Also fetch fresh price in background — updates price box silently when ready
       fetchFreshPrice(raw, cached);
       finish(raw, normalizeAI(cached));
       return;
