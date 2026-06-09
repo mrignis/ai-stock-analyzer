@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Privacy Policy — AI Stock Analyzer</title>
+<style>
+  body { max-width: 720px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; line-height: 1.7; }
+  h1 { font-size: 28px; margin-bottom: 6px; }
+  h2 { font-size: 18px; margin-top: 32px; color: #16213e; }
+  p, li { font-size: 15px; color: #333; }
+  ul { padding-left: 20px; }
+  a { color: #2563eb; }
+  .updated { font-size: 13px; color: #888; margin-bottom: 32px; }
+  .highlight { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; border-radius: 4px; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<p class="updated">Last updated: June 9, 2026</p>
+
+<div class="highlight">
+  <strong>Short version:</strong> AI Stock Analyzer does not collect, store, or share any personal data. Everything stays on your device.
+</div>
+
+<h2>1. Overview</h2>
+<p>AI Stock Analyzer ("the Extension") is a Chrome browser extension that provides AI-powered stock and cryptocurrency analysis. This Privacy Policy explains how we handle information when you use the Extension.</p>
+
+<h2>2. Data We Do NOT Collect</h2>
+<p>We do not collect, transmit, or store:</p>
+<ul>
+  <li>Personal identification information (name, email, address)</li>
+  <li>Financial account information or credentials</li>
+  <li>Browsing history or activity outside the Extension</li>
+  <li>Device identifiers or IP addresses</li>
+  <li>Usage analytics or telemetry</li>
+</ul>
+
+<h2>3. Data Stored Locally on Your Device</h2>
+<p>The Extension stores the following data <strong>only on your device</strong> using Chrome's local storage API (<code>chrome.storage.local</code>):</p>
+<ul>
+  <li><strong>Watchlist</strong> — stock tickers you choose to track</li>
+  <li><strong>Portfolio</strong> — positions you manually enter (ticker, shares, buy price)</li>
+  <li><strong>Search history</strong> — tickers you have analyzed</li>
+  <li><strong>Chat conversations</strong> — your AI chat messages</li>
+  <li><strong>Preferences</strong> — language setting (Ukrainian / English) and theme (dark / light)</li>
+  <li><strong>Price cache</strong> — temporary price data (expires in 2–30 minutes)</li>
+</ul>
+<p>This data never leaves your device and is never sent to any server. You can clear it at any time by removing the Extension or via Chrome's storage settings.</p>
+
+<h2>4. Data Sent to Our Backend</h2>
+<p>When you use the Extension, the following data is sent to our Cloudflare Worker backend solely to fulfill your request:</p>
+<ul>
+  <li><strong>Stock/crypto ticker symbols</strong> — to fetch price data and generate AI analysis (e.g., "TSLA", "BTC")</li>
+  <li><strong>Your chat messages</strong> — sent to the AI model to generate a response</li>
+  <li><strong>Language preference</strong> — to return analysis in your chosen language</li>
+</ul>
+<p>This data is processed in real time to generate a response and is <strong>not logged, stored, or used for any other purpose</strong>.</p>
+
+<h2>5. Third-Party Services</h2>
+<p>The Extension uses the following third-party APIs to retrieve financial data and generate AI responses:</p>
+<ul>
+  <li><strong>Groq API</strong> (Llama 3.3 70B model) — for AI analysis and chat responses. <a href="https://groq.com/privacy-policy/" target="_blank">Groq Privacy Policy</a></li>
+  <li><strong>Finnhub</strong> — for real-time stock prices and financial data. <a href="https://finnhub.io/privacy-policy" target="_blank">Finnhub Privacy Policy</a></li>
+  <li><strong>Yahoo Finance</strong> — for price history charts and fallback pricing. <a href="https://legal.yahoo.com/us/en/yahoo/privacy/index.html" target="_blank">Yahoo Privacy Policy</a></li>
+</ul>
+<p>We are not responsible for the privacy practices of these third-party services.</p>
+
+<h2>6. Permissions Used</h2>
+<p>The Extension requests the following Chrome permissions:</p>
+<ul>
+  <li><strong>storage</strong> — to save your watchlist, portfolio, and preferences locally</li>
+  <li><strong>alarms</strong> — to check prices in the background for price alerts</li>
+  <li><strong>notifications</strong> — to display price alert notifications</li>
+  <li><strong>tabs</strong> — to open news articles in a new tab when clicked</li>
+  <li><strong>windows</strong> — to open the Extension as a floating window (Pin feature)</li>
+</ul>
+
+<h2>7. Children's Privacy</h2>
+<p>The Extension is not directed at children under 13 years of age. We do not knowingly collect any information from children.</p>
+
+<h2>8. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. Changes will be reflected by updating the "Last updated" date at the top of this page.</p>
+
+<h2>9. Contact</h2>
+<p>If you have any questions about this Privacy Policy, please open an issue on our <a href="https://github.com/mrignis/ai-stock-analyzer" target="_blank">GitHub repository</a>.</p>
+
+</body>
+</html>
