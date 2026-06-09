@@ -18,6 +18,7 @@ var chatContext = null;
 var conversations = []; // [{id, title, messages, context}]
 var currentConvId = null;
 var convListVisible = false;
+var chatSending = false; // guard against concurrent send requests
 
 function loadAll(cb) { chrome.storage.local.get(['lang','theme','watchlist','history','conversations','currentConvId','portfolio'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
@@ -138,8 +139,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('watch-btn').addEventListener('click', toggleWatch);
     document.getElementById('btn-refresh').addEventListener('click', function() {
-      if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
-      else renderWatchlist();
+      // Force-clear price cache for all watchlist/portfolio tickers so ↻ always fetches fresh
+      var keysToRemove = [];
+      watchlist.forEach(function(w) { keysToRemove.push('c_price_' + w.ticker); });
+      portfolio.forEach(function(p) { if (!keysToRemove.includes('c_price_' + p.ticker)) keysToRemove.push('c_price_' + p.ticker); });
+      chrome.storage.local.remove(keysToRemove, function() {
+        if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
+        else renderWatchlist();
+      });
     });
 
     // WL ↔ Portfolio sub-tabs
@@ -466,9 +473,9 @@ function runAnalysis() {
   cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
-      // Show cached price (from _quote), also seed the price cache
-      showCachedPrice(raw, cached);
-      if (cached._quote && cached._quote.c > 0) cacheSet('price_' + raw, cached._quote);
+      // Fetch a fresh price (respects 2-min price TTL) — do NOT seed price cache
+      // with the potentially stale _quote from the 15-min analysis cache
+      fetchFreshPrice(raw, cached);
       finish(raw, normalizeAI(cached));
       return;
     }
@@ -488,7 +495,8 @@ function runAnalysis() {
       .then(function(data) {
         if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
         cacheSet(cacheKey, data); // Save to cache (includes lang)
-        // Seed price cache from _quote to avoid extra fetch next time
+        // Seed price cache from _quote (fresh, just fetched by /analyze)
+        // so fetchFreshPrice doesn't make a redundant /price call
         if (data._quote && data._quote.c > 0) cacheSet('price_' + raw, data._quote);
         fetchFreshPrice(raw, data);
         finish(raw, normalizeAI(data));
@@ -1169,13 +1177,17 @@ function timeSince(ts) {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function sendChat() {
+  if (chatSending) return; // block concurrent sends
   var input = document.getElementById('chat-input');
   var msg = input.value.trim();
   if (!msg) return;
+  chatSending = true;
+  var sendBtn = document.getElementById('chat-send-btn');
+  sendBtn.disabled = true;
   input.value = '';
   input.focus();
 
@@ -1220,18 +1232,23 @@ function sendChat() {
             : '⏳ Rate limit reached. Try again in ' + sec + ' sec.';
         }
         appendChatMsg('ai', errMsg);
-        return;
+      } else {
+        var reply = data.reply || (lang === 'ua' ? 'Порожня відповідь.' : 'Empty response.');
+        appendChatMsg('ai', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+        if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+        saveCurrentConv();
       }
-      var reply = data.reply || (lang === 'ua' ? 'Порожня відповідь.' : 'Empty response.');
-      appendChatMsg('ai', reply);
-      chatHistory.push({ role: 'assistant', content: reply });
-      if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
-      saveCurrentConv();
     })
     .catch(function(e) {
       typingEl.remove();
-      if (e && e.name === 'AbortError') return;
-      appendChatMsg('ai', lang === 'ua' ? '⚠ Помилка зв\'язку.' : '⚠ Connection error.');
+      if (!(e && e.name === 'AbortError')) {
+        appendChatMsg('ai', lang === 'ua' ? '⚠ Помилка зв\'язку.' : '⚠ Connection error.');
+      }
+    })
+    .finally(function() {
+      chatSending = false;
+      document.getElementById('chat-send-btn').disabled = false;
     });
 }
 
@@ -1245,7 +1262,7 @@ function renderChatText(text) {
   var clean = safe
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
-    .replace(/#+\s*/g, '')
+    .replace(/^#+\s*/gm, '')     // only strip # at start of a line, not mid-sentence
     .replace(/`(.+?)`/g, '$1');
   var parts = clean.split(/\n{2,}/);
   return parts.map(function(p) {
@@ -1360,14 +1377,15 @@ function renderPortfolio() {
   var failed  = 0;
 
   portfolio.forEach(function(p, i) {
-    totalInvested += p.shares * p.buyPrice;
-
+    // NOTE: totalInvested is accumulated only when a price IS available,
+    // so P&L = totalCurrent - totalInvested reflects only priced positions.
     cacheGet('price_' + p.ticker, CACHE_PRICE_TTL, function(cached) {
       function applyPfPrice(d) {
         if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
         var curPrice = d.c;
         var invested = p.shares * p.buyPrice;
         var current  = p.shares * curPrice;
+        totalInvested += invested; // only count positions where we have a price
         var pl       = current - invested;
         var plPct    = invested > 0 ? (pl / invested * 100) : 0;
         var up       = pl >= 0;
@@ -1396,7 +1414,7 @@ function renderPortfolio() {
           if (d.c && d.c > 0) cacheSet('price_' + p.ticker, d);
           applyPfPrice(d);
         })
-        .catch(function() { pending--; updateSummary(); });
+        .catch(function() { failed++; pending--; updateSummary(); });
     });
   });
 
@@ -1522,7 +1540,7 @@ function renderNews(ticker, articles) {
 
 function timeAgoNews(ts) {
   if (!ts) return '';
-  var diff = Math.floor((Date.now() / 1000 - ts) / 60);
+  var diff = Math.max(0, Math.floor((Date.now() / 1000 - ts) / 60));
   if (diff < 60)   return diff + (lang === 'ua' ? ' хв тому' : 'm ago');
   if (diff < 1440) return Math.floor(diff / 60) + (lang === 'ua' ? ' год тому' : 'h ago');
   return Math.floor(diff / 1440) + (lang === 'ua' ? ' дн тому' : 'd ago');

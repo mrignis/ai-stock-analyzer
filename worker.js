@@ -168,22 +168,27 @@ async function handlePrice(request, env) {
   const ticker = CRYPTO_NAMES[raw] || raw;
   const sym    = CRYPTO_MAP[ticker] || ticker;
 
-  // Try Finnhub first
-  const res  = await fetch(
-    `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
-  );
-  const data = await res.json();
+  // Try Finnhub first — wrap in try/catch so a network error doesn't skip Yahoo
+  let finnhubData = null;
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
+    );
+    finnhubData = await res.json();
+  } catch {
+    // Finnhub network/parse error — proceed to Yahoo fallback
+  }
 
   // If Finnhub returns valid price — use it
-  if (data.c && data.c > 0) return json(data);
+  if (finnhubData && finnhubData.c && finnhubData.c > 0) return json(finnhubData);
 
-  // Finnhub failed — fallback to Yahoo Finance
-  const isCrypto   = !!CRYPTO_MAP[ticker];
-  const yahooSym   = isCrypto ? ticker + '-USD' : ticker;
-  const yahooData  = await yahooQuote(yahooSym);
+  // Finnhub failed or returned zero — fallback to Yahoo Finance
+  const isCrypto  = !!CRYPTO_MAP[ticker];
+  const yahooSym  = isCrypto ? ticker + '-USD' : ticker;
+  const yahooData = await yahooQuote(yahooSym);
   if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: yahooData.pc > 0 ? ((yahooData.c - yahooData.pc) / yahooData.pc * 100) : 0 });
 
-  return json(data); // return whatever Finnhub gave even if empty
+  return json(finnhubData || {}); // return whatever Finnhub gave (may be empty)
 }
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
@@ -191,7 +196,11 @@ async function handleAnalyze(request, env) {
   const { ticker, lang } = await request.json();
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
-  const raw = ticker.toUpperCase();
+  const raw = ticker.toUpperCase().trim();
+  // Reject suspiciously long or malformed tickers before they enter the AI prompt
+  if (raw.length > 15 || !/^[A-Z0-9.\-:/]+$/.test(raw)) {
+    return json({ error: 'Invalid ticker' }, 400);
+  }
   const t = CRYPTO_NAMES[raw] || raw; // normalize full name → ticker
   const isCrypto = !!CRYPTO_MAP[t];
   const finnhubSym = CRYPTO_MAP[t] || t;
@@ -347,10 +356,13 @@ async function handleChat(request, env) {
   const { messages, context, lang } = await request.json();
   if (!messages || !messages.length) return json({ error: 'No messages' }, 400);
 
+  // Server-side limit — client enforces 40 but direct POST calls bypass it
+  const safeMessages = messages.slice(-40);
+
   const ua = lang === 'ua';
 
   // Detect tickers and fetch live prices
-  const lastMsg = messages[messages.length - 1]?.content || '';
+  const lastMsg = safeMessages[safeMessages.length - 1]?.content || '';
   const rawTokens = lastMsg.toUpperCase().match(/\b[A-Z]{2,5}\b/g) || [];
   const potentialTickers = [...new Set(rawTokens.filter(t => !SKIP_WORDS.has(t)))].slice(0, 3);
 
@@ -385,7 +397,7 @@ async function handleChat(request, env) {
 
   const groqMessages = [
     { role: 'system', content: system },
-    ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+    ...safeMessages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
   ];
 
   let reply;
