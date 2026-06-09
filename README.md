@@ -1,6 +1,6 @@
 # 📈 AI Stock Analyzer
 
-AI-powered Chrome extension for real-time stock & crypto analysis. **Completely free — no API keys needed.**
+AI-powered Chrome extension for real-time stock & crypto analysis. **Completely free — no setup required.**
 
 ![Version](https://img.shields.io/badge/version-2.0-green) ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -23,6 +23,10 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 
 ## 🚀 Installation
 
+**Option A — Chrome Web Store** *(coming soon)*
+> One-click install — no setup needed
+
+**Option B — Manual (Developer mode)**
 1. Download this repository → click **Code → Download ZIP**
 2. Unzip the folder
 3. Open Chrome → go to `chrome://extensions/`
@@ -30,7 +34,7 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 5. Click **Load unpacked** → select the unzipped folder
 6. The 📈 icon appears in your Chrome toolbar
 
-**No API keys required.** Uses a free cloud backend.
+**No API keys required.** The extension connects to a free cloud backend automatically.
 
 ## 📊 How to use
 
@@ -42,7 +46,7 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 6. Add to **WL** (Watchlist) to track prices
 7. Open **💼 Portfolio** tab inside WL to track your positions and P&L
 8. Set price alert threshold in **🔔 Alerts** tab
-9. Open **⚙ Settings → 📌 Open in tab** to pin the extension as a floating window
+9. Open **⚙ Settings → 📌 Pin Window** to keep the extension open as a floating window
 
 ## 💡 Tech Stack
 
@@ -58,7 +62,10 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 - Stock tickers and chat messages are sent to the AI only to generate a response — not logged or saved
 - No accounts, no tracking, no ads
 
-## 🛠️ Self-hosting (optional)
+<details>
+<summary>🛠️ Self-hosting (for developers only)</summary>
+
+> Regular users don't need this. The extension works out of the box with a shared free backend.
 
 Want to run your own backend?
 
@@ -78,3 +85,5 @@ Want to run your own backend?
    wrangler deploy
    ```
 6. Update `WORKER_URL` in `popup.js` and `background.js` with your worker URL
+
+</details>
