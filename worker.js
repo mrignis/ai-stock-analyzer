@@ -58,8 +58,20 @@ async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
   }
   clearTimeout(timer);
 
-  const data = await res.json();
-  if (data.error) throw new Error('Groq: ' + data.error.message);
+  // Read as text first — Groq sometimes returns HTML error pages instead of JSON
+  const rawText = await res.text();
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    // Not valid JSON — Groq returned an error page
+    if (res.status === 503 || res.status === 504 || res.status === 502) {
+      throw new Error('Groq перевантажений (HTTP ' + res.status + '). Спробуй ще раз / Try again.');
+    }
+    throw new Error('Groq error (HTTP ' + res.status + '). Try again.');
+  }
+
+  if (data.error) throw new Error('Groq: ' + (data.error.message || JSON.stringify(data.error)));
   const text = data.choices?.[0]?.message?.content || '';
   if (!text) throw new Error('Groq returned empty response');
   return text;
