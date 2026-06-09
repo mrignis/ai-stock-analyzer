@@ -485,6 +485,10 @@ function runAnalysis() {
     document.getElementById('loading-msg').textContent = (lang === 'ua' ? 'Аналізую ' : 'Analyzing ') + raw + '...';
 
     var signal = currentAbort.signal;
+    // Auto-abort after 45s so the loading spinner never hangs forever
+    var timeoutId = setTimeout(function() {
+      if (currentAbort) { currentAbort.abort(); currentAbort = null; }
+    }, 45000);
     fetch(WORKER_URL + '/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -493,6 +497,7 @@ function runAnalysis() {
     })
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        clearTimeout(timeoutId);
         if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
         cacheSet(cacheKey, data); // Save to cache (includes lang)
         // Seed price cache from _quote (fresh, just fetched by /analyze)
@@ -502,7 +507,11 @@ function runAnalysis() {
         finish(raw, normalizeAI(data));
       })
       .catch(function(e) {
-        if (e.name === 'AbortError') return;
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+          showError(lang === 'ua' ? 'Час очікування вийшов. Спробуй ще раз.' : 'Request timed out. Please try again.');
+          return;
+        }
         var msg = e.message || '';
         var retryMatch = msg.match(/retry in ([\d.]+)s/i);
         if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted') || msg.toLowerCase().includes('rate')) {
