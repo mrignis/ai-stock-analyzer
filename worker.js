@@ -376,6 +376,13 @@ const SKIP_WORDS = new Set([
   'KNOW','TAKE','YEAR','YOUR','GOOD','MUCH','VERY','WELL','SUCH','EVEN','MOST',
   'USED','MAKE','WANT','LOOK','MORE','GO','IT','OF','IF','US','WE','UP','NO','SO',
   'HE','SHE','ME','MY','WHO','HOW','WHY','ITS','HIM',
+  // Common chat words that look like tickers
+  'INFO','TELL','SHOW','GIVE','HELP','DOES','MEAN','NEED','FIND','BEST','NEXT',
+  'SELL','HIGH','DOWN','FALL','RISE','GAIN','LOSS','LOST','LAST','PAST','REAL',
+  'LIVE','DATA','NEWS','SURE','OKAY','CHAT','LONG','HOLD','NICE','SAFE',
+  'RISK','RATE','PLAN','OPEN','STOP','KEEP','CASH','IDEA','ONES','BOTH',
+  'ABOVE','BELOW','ABOUT','AFTER','AGAIN','PRICE','STOCK','SHARE','TRADE','WORTH',
+  'TODAY','SINCE','THINK','FEELS','LOOKS','MAYBE','RIGHT','WRONG','STILL','OTHER',
 ]);
 
 async function handleChat(request, env) {
@@ -414,8 +421,9 @@ async function handleChat(request, env) {
   const system = [
     'You are a helpful stock market and finance assistant with access to live market data.',
     `Today is ${getToday()}.`,
-    'Your training data has a cutoff — always prioritize the live market data provided below over your training knowledge. Never give prices or news from your training as if they are current.',
-    context ? `Current analysis context: ${context}` : '',
+    'CRITICAL RULE: If live market data or analysis context below contains a price for a ticker, that ticker IS valid and currently trading. Do NOT say a ticker is invalid, delisted, or non-existent if data was provided for it. Your training data is outdated — companies get relisted, renamed, or split. Always trust live data over training knowledge.',
+    'Never contradict live data with training knowledge. NEVER give specific prices, percentages, or market cap figures from your training data — those are outdated and wrong. Only state prices that appear in the live data or context provided. If you do not have live data for a ticker, say you do not have current price info rather than guessing.',
+    context ? `Current stock analysis context (treat as ground truth): ${context}` : '',
     liveData,
     ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
     'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks, no bullet symbols. Use line breaks between paragraphs.',

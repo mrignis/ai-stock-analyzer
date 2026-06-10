@@ -108,13 +108,9 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('ticker-input').focus();
       currentTicker = ''; currentData = null;
     });
-    document.getElementById('tab-search').addEventListener('click', function() { showPanel('search'); });
-    document.getElementById('tab-watchlist').addEventListener('click', function() { showPanel('watchlist'); });
-    document.getElementById('tab-history').addEventListener('click', function() { showPanel('history'); });
-    document.getElementById('tab-chat').addEventListener('click', function() { showPanel('chat'); });
-    document.getElementById('tab-news').addEventListener('click', function() { showPanel('news'); });
-    document.getElementById('tab-alerts').addEventListener('click', function() { showPanel('alerts'); });
-    document.getElementById('tab-settings').addEventListener('click', function() { showPanel('settings'); });
+    ['search','watchlist','history','chat','news','alerts','settings'].forEach(function(id) {
+      document.getElementById('tab-' + id).addEventListener('click', function() { showPanel(id); });
+    });
 
     document.getElementById('lang-btn').addEventListener('click', function() {
       lang = lang === 'ua' ? 'en' : 'ua';
@@ -288,6 +284,8 @@ function applyLang() {
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
   document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
+  var lblBmac = document.getElementById('lbl-bmac');
+  if (lblBmac) lblBmac.textContent = ua ? 'Підтримати проект' : 'Support the project';
   var lblPin = document.getElementById('lbl-pin');
   if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in window';
   var btnPin = document.getElementById('btn-pin-tab');
@@ -417,24 +415,8 @@ function renderHomeWatchlist() {
 
   // Fetch live prices (with cache)
   shown.forEach(function(w) {
-    function applyPrice(d) {
-      if (!d || !d.c || d.c === 0) return;
-      var priceEl = document.getElementById('hwp-' + w.ticker);
-      var pctEl   = document.getElementById('hwpc-' + w.ticker);
-      if (!priceEl || !pctEl) return;
-      var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
-      var up = pct >= 0;
-      priceEl.textContent = '$' + formatPrice(d.c);
-      priceEl.style.color = 'var(--text)';
-      pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
-      pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
-    }
-    cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
-      if (cached) { applyPrice(cached); return; } // cache fresh — skip network
-      fetch(WORKER_URL + '/price?ticker=' + w.ticker)
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyPrice(d); } })
-        .catch(function() {});
+    loadLivePrice(w.ticker, function(d) {
+      applyPriceToElements(d, 'hwp-' + w.ticker, 'hwpc-' + w.ticker);
     });
   });
 }
@@ -527,32 +509,15 @@ function runAnalysis() {
 }
 
 function fetchFreshPrice(raw, fallbackData) {
-  cacheGet('price_' + raw, CACHE_PRICE_TTL, function(cachedPrice) {
-    if (cachedPrice) {
-      renderPrice(cachedPrice);
-      return;
+  loadLivePrice(raw, function(d) {
+    if (d && d.c && d.c > 0) {
+      renderPrice(d);
+    } else if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
+      renderPrice(fallbackData._quote);
     }
-    fetch(WORKER_URL + '/price?ticker=' + raw)
-      .then(function(r) { return r.json(); })
-      .then(function(pd) {
-        if (pd.c && pd.c > 0) {
-          cacheSet('price_' + raw, pd);
-          renderPrice(pd);
-        } else if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
-          renderPrice(fallbackData._quote);
-        }
-      })
-      .catch(function() {
-        if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
-          renderPrice(fallbackData._quote);
-        }
-      });
   });
 }
 
-function showCachedPrice(raw, cached) {
-  if (cached._quote && cached._quote.c) renderPrice(cached._quote);
-}
 
 function renderPrice(q) {
   if (!q || !q.c) return;
@@ -590,6 +555,47 @@ function formatChange(ch) {
   if (Math.abs(ch) >= 100) return Math.round(ch).toString();
   if (Math.abs(ch) >= 1)   return ch.toFixed(2);
   return ch.toFixed(4);
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+// Unified cache-then-fetch for live prices; calls cb(data) or cb(null) on error
+function loadLivePrice(ticker, cb) {
+  cacheGet('price_' + ticker, CACHE_PRICE_TTL, function(cached) {
+    if (cached) { cb(cached); return; }
+    fetch(WORKER_URL + '/price?ticker=' + ticker)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.c && d.c > 0) cacheSet('price_' + ticker, d);
+        cb(d);
+      })
+      .catch(function() { cb(null); });
+  });
+}
+
+// Applies live price data to a price + percent element pair
+function applyPriceToElements(d, priceId, pctId) {
+  if (!d || !d.c || d.c === 0) return;
+  var priceEl = document.getElementById(priceId);
+  var pctEl   = document.getElementById(pctId);
+  if (!priceEl || !pctEl) return;
+  var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
+  var up = pct >= 0;
+  priceEl.textContent = '$' + formatPrice(d.c);
+  priceEl.style.color = 'var(--text)';
+  pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+  pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+}
+
+// Unified "time ago" — long=true adds "тому" suffix (for alerts/news)
+function timeAgo(ts, long) {
+  var diff = Math.floor((Date.now() - ts) / 60000);
+  var ua = lang === 'ua';
+  var suf = long ? (ua ? ' тому' : '') : '';
+  if (diff < 1)    return ua ? 'щойно' : 'just now';
+  if (diff < 60)   return diff + (ua ? (' хв' + suf) : 'm ago');
+  if (diff < 1440) return Math.floor(diff / 60) + (ua ? (' год' + suf) : 'h ago');
+  return Math.floor(diff / 1440) + (ua ? (' д' + suf) : 'd ago');
 }
 
 function normalizeAI(j) {
@@ -779,6 +785,34 @@ function renderResult(ticker, d) {
 }
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
+var CHART_COLORS = { green:'#4ade80', yellow:'#fbbf24', red:'#f87171', blue:'#60a5fa' };
+
+// Shared canvas drawing — used by both real and simulated chart functions
+function drawChartLine(canvas, pts, lc, changePct) {
+  var ctx = canvas.getContext('2d');
+  var H = canvas.height, n = pts.length;
+  var chEl = document.getElementById('chart-change');
+  if (chEl) {
+    chEl.style.color = changePct >= 0 ? 'var(--green)' : 'var(--red)';
+    chEl.textContent = (changePct >= 0 ? '+' : '') + changePct.toFixed(1) + '%';
+  }
+  ctx.clearRect(0, 0, canvas.width, H);
+  ctx.beginPath(); ctx.moveTo(pts[0].x, H);
+  pts.forEach(function(p) { ctx.lineTo(p.x, p.y); });
+  ctx.lineTo(pts[n-1].x, H); ctx.closePath();
+  ctx.fillStyle = lc + '22'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < n; i++) {
+    var mx = (pts[i-1].x + pts[i].x) / 2;
+    var my = (pts[i-1].y + pts[i].y) / 2;
+    ctx.quadraticCurveTo(pts[i-1].x, pts[i-1].y, mx, my);
+  }
+  ctx.lineTo(pts[n-1].x, pts[n-1].y);
+  ctx.strokeStyle = lc; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(pts[n-1].x, pts[n-1].y, 3, 0, Math.PI*2);
+  ctx.fillStyle = lc; ctx.fill();
+}
+
 function fetchRealChart(ticker, color) {
   var lbl = document.getElementById('lbl-chart');
   cacheGet('candle_' + ticker, CACHE_CANDLE_TTL, function(cached) {
@@ -809,61 +843,24 @@ function fetchRealChart(ticker, color) {
 function drawChartFromPrices(prices, color) {
   var canvas = document.getElementById('trend-chart');
   if (!canvas) return;
-  var ctx = canvas.getContext('2d');
   var W = canvas.offsetWidth || 400, H = 80, pad = 8;
   canvas.width = W; canvas.height = H;
-
   var min = Math.min.apply(null, prices);
   var max = Math.max.apply(null, prices);
   var range = max - min || 1;
   var n = prices.length;
-
   var pts = prices.map(function(p, i) {
     return {
-      x: pad + (i / (n - 1)) * (W - pad * 2),
-      y: H - pad - ((p - min) / range) * (H - pad * 2)
+      x: pad + (i / (n-1)) * (W - pad*2),
+      y: H - pad - ((p - min) / range) * (H - pad*2)
     };
   });
-
-  var cMap = { green:'#4ade80', yellow:'#fbbf24', red:'#f87171', blue:'#60a5fa' };
-  var lc = cMap[color] || '#60a5fa';
-
-  // % change label
-  var ch = ((prices[n - 1] - prices[0]) / prices[0] * 100).toFixed(1);
-  var chNum = parseFloat(ch);
-  var chEl = document.getElementById('chart-change');
-  if (chEl) {
-    chEl.style.color = chNum >= 0 ? 'var(--green)' : 'var(--red)';
-    chEl.textContent = (chNum >= 0 ? '+' : '') + ch + '%';
-  }
-
-  ctx.clearRect(0, 0, W, H);
-  // Fill area
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, H);
-  pts.forEach(function(p) { ctx.lineTo(p.x, p.y); });
-  ctx.lineTo(pts[n - 1].x, H);
-  ctx.closePath();
-  ctx.fillStyle = lc + '22';
-  ctx.fill();
-  // Smooth line
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (var i = 1; i < pts.length; i++) {
-    var mx = (pts[i - 1].x + pts[i].x) / 2;
-    var my = (pts[i - 1].y + pts[i].y) / 2;
-    ctx.quadraticCurveTo(pts[i - 1].x, pts[i - 1].y, mx, my);
-  }
-  ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
-  ctx.strokeStyle = lc;
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  drawChartLine(canvas, pts, CHART_COLORS[color] || '#60a5fa', (prices[n-1] - prices[0]) / prices[0] * 100);
 }
 
 function drawChartSimulated(dir, color) {
   var canvas = document.getElementById('trend-chart');
   if (!canvas) return;
-  var ctx = canvas.getContext('2d');
   var W = canvas.offsetWidth || 400, H = 80, pad = 8;
   canvas.width = W; canvas.height = H;
   var cfgs = { up:{d:-0.6,n:2.5}, up_strong:{d:-1.1,n:3}, down:{d:0.7,n:2.5}, volatile:{d:0,n:6}, flat:{d:0,n:1.5} };
@@ -877,27 +874,9 @@ function drawChartSimulated(dir, color) {
   for (var i = 0; i < 30; i++) {
     y += cfg.d + (rand() - 0.5) * cfg.n * 2;
     y = Math.max(pad, Math.min(H - pad, y));
-    pts.push({ x: pad + (i / 29) * (W - pad * 2), y: y });
+    pts.push({ x: pad + (i / 29) * (W - pad*2), y: y });
   }
-  var cMap = { green:'#4ade80', yellow:'#fbbf24', red:'#f87171', blue:'#60a5fa' };
-  var lc = cMap[color] || '#60a5fa';
-  var ch = (((pts[29].y - pts[0].y) / pts[0].y) * -100).toFixed(1);
-  var chNum = parseFloat(ch);
-  var chEl = document.getElementById('chart-change');
-  chEl.style.color = chNum >= 0 ? 'var(--green)' : 'var(--red)';
-  chEl.textContent = (chNum >= 0 ? '+' : '') + ch + '%';
-  ctx.clearRect(0, 0, W, H);
-  ctx.beginPath(); ctx.moveTo(pts[0].x, H);
-  for (var i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.lineTo(pts[29].x, H); ctx.closePath(); ctx.fillStyle = lc + '22'; ctx.fill();
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (var i = 1; i < pts.length; i++) {
-    var mx = (pts[i - 1].x + pts[i].x) / 2;
-    var my = (pts[i - 1].y + pts[i].y) / 2;
-    ctx.quadraticCurveTo(pts[i - 1].x, pts[i - 1].y, mx, my);
-  }
-  ctx.strokeStyle = lc; ctx.lineWidth = 2; ctx.stroke();
-  ctx.beginPath(); ctx.arc(pts[29].x, pts[29].y, 3, 0, Math.PI * 2); ctx.fillStyle = lc; ctx.fill();
+  drawChartLine(canvas, pts, CHART_COLORS[color] || '#60a5fa', (pts[29].y - pts[0].y) / pts[0].y * -100);
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────────────
@@ -955,24 +934,8 @@ function renderWatchlist() {
 
   // Fetch live prices (with cache)
   watchlist.forEach(function(w) {
-    function applyWPrice(d) {
-      if (!d || !d.c || d.c === 0) return;
-      var priceEl = document.getElementById('wp-' + w.ticker);
-      var pctEl   = document.getElementById('wpc-' + w.ticker);
-      if (!priceEl || !pctEl) return;
-      var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
-      var up = pct >= 0;
-      priceEl.textContent = '$' + formatPrice(d.c);
-      priceEl.style.color = 'var(--text)';
-      pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
-      pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
-    }
-    cacheGet('price_' + w.ticker, CACHE_PRICE_TTL, function(cached) {
-      if (cached) { applyWPrice(cached); return; } // cache fresh — skip network
-      fetch(WORKER_URL + '/price?ticker=' + w.ticker)
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.c && d.c > 0) { cacheSet('price_' + w.ticker, d); applyWPrice(d); } })
-        .catch(function() {});
+    loadLivePrice(w.ticker, function(d) {
+      applyPriceToElements(d, 'wp-' + w.ticker, 'wpc-' + w.ticker);
     });
   });
 }
@@ -1004,14 +967,7 @@ function renderHistory() {
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 
-function timeAgoAlerts(ts) {
-  var diff = Math.floor((Date.now() - ts) / 60000);
-  var ua = lang === 'ua';
-  if (diff < 1)    return ua ? 'щойно' : 'just now';
-  if (diff < 60)   return diff + (ua ? ' хв тому' : 'm ago');
-  if (diff < 1440) return Math.floor(diff / 60) + (ua ? ' год тому' : 'h ago');
-  return Math.floor(diff / 1440) + (ua ? ' д тому' : 'd ago');
-}
+function timeAgoAlerts(ts) { return timeAgo(ts, true); }
 
 function toast(msg) {
   var t = document.createElement('div');
@@ -1165,7 +1121,15 @@ function deleteConversation(id) {
 }
 
 function setChatContext(ticker, data) {
-  chatContext = ticker + ': sector=' + data.sector + ', verdict=' + data.verdict + ', trend=' + data.trend + ', risk=' + data.risk + '. Forecast: ' + data.forecast;
+  var q = data._quote || {};
+  var priceStr = q.c ? '$' + q.c + (q.dp != null ? ' (' + (q.dp > 0 ? '+' : '') + q.dp.toFixed(2) + '% today)' : '') : '';
+  chatContext = ticker + (priceStr ? ' current price ' + priceStr : '') +
+    ': sector=' + data.sector +
+    ', verdict=' + data.verdict +
+    ', trend=' + data.trend +
+    ', risk=' + data.risk +
+    (data.what ? ', company: ' + data.what : '') +
+    '. Forecast: ' + data.forecast;
   document.getElementById('chat-ctx-ticker').textContent = ticker;
   document.getElementById('chat-ctx-bar').style.display = 'flex';
   saveCurrentConv();
@@ -1178,13 +1142,7 @@ function clearChatContext() {
   saveCurrentConv();
 }
 
-function timeSince(ts) {
-  var diff = Math.floor((Date.now() - ts) / 60000);
-  if (diff < 1) return lang === 'ua' ? 'щойно' : 'just now';
-  if (diff < 60) return diff + (lang === 'ua' ? ' хв' : 'm ago');
-  if (diff < 1440) return Math.floor(diff / 60) + (lang === 'ua' ? ' год' : 'h ago');
-  return Math.floor(diff / 1440) + (lang === 'ua' ? ' д' : 'd ago');
-}
+function timeSince(ts) { return timeAgo(ts, false); }
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1389,42 +1347,31 @@ function renderPortfolio() {
   portfolio.forEach(function(p, i) {
     // NOTE: totalInvested is accumulated only when a price IS available,
     // so P&L = totalCurrent - totalInvested reflects only priced positions.
-    cacheGet('price_' + p.ticker, CACHE_PRICE_TTL, function(cached) {
-      function applyPfPrice(d) {
-        if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
-        var curPrice = d.c;
-        var invested = p.shares * p.buyPrice;
-        var current  = p.shares * curPrice;
-        totalInvested += invested; // only count positions where we have a price
-        var pl       = current - invested;
-        var plPct    = invested > 0 ? (pl / invested * 100) : 0;
-        var up       = pl >= 0;
-        var color    = up ? 'var(--green)' : 'var(--red)';
-        var sign     = up ? '+' : '';
+    loadLivePrice(p.ticker, function(d) {
+      if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
+      var curPrice = d.c;
+      var invested = p.shares * p.buyPrice;
+      var current  = p.shares * curPrice;
+      totalInvested += invested;
+      var pl    = current - invested;
+      var plPct = invested > 0 ? (pl / invested * 100) : 0;
+      var up    = pl >= 0;
+      var color = up ? 'var(--green)' : 'var(--red)';
+      var sign  = up ? '+' : '';
 
-        var priceEl = document.getElementById('pf-price-' + i);
-        var plEl    = document.getElementById('pf-pl-' + i);
-        if (priceEl) {
-          priceEl.textContent = '$' + formatPrice(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
-          priceEl.style.color = 'var(--text)';
-        }
-        if (plEl) {
-          plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + '</span>' +
-            '<br><span style="font-size:10px;color:' + color + '">' + sign + plPct.toFixed(1) + '%</span>';
-        }
-        totalCurrent += current;
-        pending--;
-        updateSummary();
+      var priceEl = document.getElementById('pf-price-' + i);
+      var plEl    = document.getElementById('pf-pl-' + i);
+      if (priceEl) {
+        priceEl.textContent = '$' + formatPrice(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
+        priceEl.style.color = 'var(--text)';
       }
-
-      if (cached) { applyPfPrice(cached); return; }
-      fetch(WORKER_URL + '/price?ticker=' + p.ticker)
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (d.c && d.c > 0) cacheSet('price_' + p.ticker, d);
-          applyPfPrice(d);
-        })
-        .catch(function() { failed++; pending--; updateSummary(); });
+      if (plEl) {
+        plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + '</span>' +
+          '<br><span style="font-size:10px;color:' + color + '">' + sign + plPct.toFixed(1) + '%</span>';
+      }
+      totalCurrent += current;
+      pending--;
+      updateSummary();
     });
   });
 
