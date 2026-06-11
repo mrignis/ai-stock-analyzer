@@ -302,7 +302,12 @@ Return ONLY this JSON structure:
   } catch (e) {
     return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
   }
-  return json({ ...analysis, _quote: quote });
+  return json({
+    ...analysis,
+    _quote: quote,
+    _country: profile.country || null,
+    _name: profile.name || null,
+  });
 }
 
 // ── /news?ticker=TSLA ────────────────────────────────────────────────────────

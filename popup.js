@@ -1131,7 +1131,9 @@ function setChatContext(ticker, data) {
   var q = data._quote || {};
   var priceStr = q.c ? '$' + q.c + (q.dp != null ? ' (' + (q.dp > 0 ? '+' : '') + q.dp.toFixed(2) + '% today)' : '') : '';
   chatContext = ticker + (priceStr ? ' current price ' + priceStr : '') +
+    (data._name ? ' (' + data._name + ')' : '') +
     ': sector=' + data.sector +
+    (data._country ? ', country of registration=' + data._country : '') +
     ', verdict=' + data.verdict +
     ', trend=' + data.trend +
     ', risk=' + data.risk +
