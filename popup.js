@@ -98,7 +98,9 @@ document.addEventListener('DOMContentLoaded', function() {
     applyLang();
     loadFxRate(function() {
       fetchMarketData();
-      renderHomeWatchlist();
+      // Popup open = fresh prices: drop the price cache so the home
+      // watchlist fetches live numbers right away (user request)
+      freshPrices(watchlist.map(function(w) { return w.ticker; }), renderHomeWatchlist);
     });
 
     document.getElementById('nav-logo').addEventListener('click', function() {
@@ -375,8 +377,10 @@ function showPanel(id) {
 
 // ── Market Overview ───────────────────────────────────────────────────────────
 function fetchMarketData() {
+  // Stale-while-revalidate: cached cards appear instantly, then a fresh
+  // fetch silently updates them — popup open always ends with live data
   cacheGet('market', CACHE_MARKET_TTL, function(cached) {
-    if (cached) { renderMarketCards(cached); return; } // cache fresh — skip network
+    if (cached) renderMarketCards(cached);
     fetch(WORKER_URL + '/market')
       .then(function(r) { return r.json(); })
       .then(function(data) {
