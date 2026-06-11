@@ -370,7 +370,7 @@ function showPanel(id) {
   }
   if (id === 'history') renderHistory();
   if (id === 'news') initNews();
-  if (id === 'alerts') initAlerts();
+  if (id === 'alerts') freshPrices(wlTickers, initAlerts);
 }
 
 // ── Market Overview ───────────────────────────────────────────────────────────
@@ -1713,7 +1713,25 @@ function initAlerts() {
     document.getElementById('threshold-slider').value = threshold;
     document.getElementById('threshold-value').textContent = threshold + '%';
     renderTargets(s.priceTargets || []);
+    // Instant render from the background snapshot, then refresh with live
+    // prices (stale-while-revalidate — same standard as the other tabs)
     renderAlertPrices(s.priceAlerts || {});
+    var live = {};
+    var pending = watchlist.length;
+    if (!pending) return;
+    watchlist.forEach(function(w) {
+      loadLivePrice(w.ticker, function(d) {
+        if (d && d.c && d.c > 0) {
+          live[w.ticker] = {
+            price: d.c,
+            pct: (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0,
+            time: Date.now(),
+          };
+        }
+        pending--;
+        if (pending === 0 && Object.keys(live).length > 0) renderAlertPrices(live);
+      });
+    });
   });
 }
 
