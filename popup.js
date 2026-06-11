@@ -500,7 +500,17 @@ function runAnalysis() {
       body: JSON.stringify({ ticker: raw, lang: lang }),
       signal: signal,
     })
-      .then(function(r) { return r.json(); })
+      .then(function(r) { return r.text(); })
+      .then(function(txt) {
+        // Cloudflare returns an HTML error page when the worker crashes or
+        // times out — show a human message instead of a JSON parse error
+        try { return JSON.parse(txt); }
+        catch (_) {
+          throw new Error(lang === 'ua'
+            ? 'Сервер тимчасово недоступний. Спробуй ще раз за хвилину.'
+            : 'Server temporarily unavailable. Try again in a minute.');
+        }
+      })
       .then(function(data) {
         clearTimeout(timeoutId);
         if (currentTicker !== raw) return; // stale response — user already analyzes another ticker
@@ -1269,7 +1279,15 @@ function sendChat() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: chatHistory, context: chatContext, lang: lang, currency: currency, fxRate: fxRate }),
   })
-    .then(function(r) { return r.json(); })
+    .then(function(r) { return r.text(); })
+    .then(function(txt) {
+      try { return JSON.parse(txt); }
+      catch (_) {
+        throw new Error(lang === 'ua'
+          ? 'Сервер тимчасово недоступний. Спробуй ще раз за хвилину.'
+          : 'Server temporarily unavailable. Try again in a minute.');
+      }
+    })
     .then(function(data) {
       typingEl.remove();
       if (data.error) {
@@ -1293,7 +1311,7 @@ function sendChat() {
     .catch(function(e) {
       typingEl.remove();
       if (!(e && e.name === 'AbortError')) {
-        appendChatMsg('ai', lang === 'ua' ? '⚠ Помилка зв\'язку.' : '⚠ Connection error.');
+        appendChatMsg('ai', '⚠ ' + (e && e.message ? e.message : (lang === 'ua' ? 'Помилка зв\'язку.' : 'Connection error.')));
       }
     })
     .finally(function() {
