@@ -119,6 +119,18 @@ export default {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
+// fetch with a hard timeout — a hung upstream API must not eat the 25s budget
+// (claude-helper audit finding #1)
+async function fetchT(url, opts = {}, ms = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Parses ?ticker= from URL, normalizes crypto names. Returns null if missing.
 function parseTicker(request) {
   const raw = (new URL(request.url).searchParams.get('ticker') || '').toUpperCase();
@@ -127,12 +139,13 @@ function parseTicker(request) {
   return { t, isCrypto: !!CRYPTO_MAP[t] };
 }
 
-// Fetches a Finnhub quote, returns parsed JSON or null on network error
+// Fetches a Finnhub quote, returns parsed JSON or null on error/timeout
 async function finnhubQuote(env, sym) {
   try {
-    const res = await fetch(
+    const res = await fetchT(
       `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
     );
+    if (!res.ok) return null; // 429/5xx: don't try to parse HTML error pages
     return await res.json();
   } catch {
     return null;
@@ -158,18 +171,20 @@ async function fetchCompanyInfo(env, t) {
   if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
 
   const [profile, news] = await Promise.all([
-    fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`)
-      .then(r => r.json()).catch(() => null),
-    fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${getDateDaysAgo(7)}&to=${getToday()}&token=${env.FINNHUB_KEY}`)
-      .then(r => r.json()).catch(() => []),
+    fetchT(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`)
+      .then(r => r.ok ? r.json() : null).catch(() => null),
+    fetchT(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${getDateDaysAgo(7)}&to=${getToday()}&token=${env.FINNHUB_KEY}`)
+      .then(r => r.ok ? r.json() : []).catch(() => []),
   ]);
 
   const parts = [];
   if (profile && profile.name) {
+    // Guard: free-tier Finnhub may return cap as string/null — only format real numbers
+    const cap = Number(profile.marketCapitalization);
     parts.push(
       `${t} company profile: ${profile.name}, country of registration=${profile.country || 'N/A'}, ` +
       `industry=${profile.finnhubIndustry || 'N/A'}, ` +
-      `market cap=${profile.marketCapitalization ? '$' + (profile.marketCapitalization / 1000).toFixed(1) + 'B' : 'N/A'}, ` +
+      `market cap=${cap > 0 ? '$' + (cap / 1000).toFixed(1) + 'B' : 'N/A'}, ` +
       `IPO=${profile.ipo || 'N/A'}, website=${profile.weburl || 'N/A'}.`
     );
     // Wikipedia intro — covers history and what the company is known for.
@@ -177,7 +192,7 @@ async function fetchCompanyInfo(env, t) {
     try {
       const stripped = profile.name.replace(/[,.]?\s+(Inc|Corp|Corporation|Ltd|PLC|Co|Class [A-C])\.?$/i, '').trim();
       for (const title of [...new Set([profile.name, stripped])]) {
-        const w = await fetch(
+        const w = await fetchT(
           `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
           { headers: { 'User-Agent': 'stock-ai-analyzer/1.0' } }
         );
@@ -210,10 +225,11 @@ const NAME_TO_TICKER = {
 async function yahooQuote(symbol) {
   // Crypto needs -USD suffix (BTC → BTC-USD), stocks stay as-is (SPY, TSLA)
   try {
-    const res  = await fetch(
+    const res  = await fetchT(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
+    if (!res.ok) return null;
     const data = await res.json();
     const meta = data?.chart?.result?.[0]?.meta;
     if (!meta) return null;
@@ -546,11 +562,18 @@ async function handleFx(request) {
 
   if (to === 'UAH') {
     try {
-      const r = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD&json');
-      const d = await r.json();
+      const r = await fetchT('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD&json');
+      const d = r.ok ? await r.json() : null;
       if (Array.isArray(d) && d[0] && d[0].rate > 0) return json({ rate: d[0].rate, source: 'nbu' });
-    } catch { /* NBU is optional — fall through to static */ }
+    } catch { /* NBU is optional — fall through */ }
   }
+  // Free open API as the live fallback for any currency (claude-helper audit finding #4)
+  try {
+    const r = await fetchT('https://open.er-api.com/v6/latest/USD');
+    const d = r.ok ? await r.json() : null;
+    const rate = d && d.rates && d.rates[to];
+    if (rate > 0) return json({ rate, source: 'er-api' });
+  } catch { /* fall through to static */ }
   if (to in FX_STATIC) return json({ rate: FX_STATIC[to], source: 'static' });
   return json({ error: 'Rate unavailable' }, 502);
 }

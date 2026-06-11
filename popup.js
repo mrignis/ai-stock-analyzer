@@ -473,6 +473,7 @@ function runAnalysis() {
 
   // Check cache first — show result instantly if available
   cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
+    if (currentTicker !== raw) return; // a newer analysis started — drop stale callback
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
       // Show cached price immediately (instant UX — stale-while-revalidate)
@@ -501,6 +502,7 @@ function runAnalysis() {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         clearTimeout(timeoutId);
+        if (currentTicker !== raw) return; // stale response — user already analyzes another ticker
         if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
         cacheSet(cacheKey, data); // Save to cache (includes lang)
         // Seed price cache from _quote (fresh, just fetched by /analyze)
@@ -530,6 +532,7 @@ function runAnalysis() {
 
 function fetchFreshPrice(raw, fallbackData) {
   loadLivePrice(raw, function(d) {
+    if (currentTicker !== raw) return; // late callback after Stop or a newer analysis
     if (d && d.c && d.c > 0) {
       renderPrice(d);
     } else if (fallbackData && fallbackData._quote && fallbackData._quote.c) {
