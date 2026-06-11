@@ -78,7 +78,7 @@ async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS });
     }
@@ -89,11 +89,24 @@ export default {
       if (url.pathname === '/test' && request.method === 'GET') {
         return json({ ok: true, time: Date.now(), model: GROQ_MODEL });
       }
-      if (url.pathname === '/market' && request.method === 'GET') {
-        return await handleMarket(env);
-      }
-      if (url.pathname === '/price' && request.method === 'GET') {
-        return await handlePrice(request, env);
+      // Edge cache for hot GET endpoints: every client sees the SAME price
+      // within a 20s window (consistency) and repeat hits answer in ~50ms
+      // straight from Cloudflare's edge instead of round-tripping to Finnhub.
+      if ((url.pathname === '/price' || url.pathname === '/market') && request.method === 'GET') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString());
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+        const res = url.pathname === '/price'
+          ? await handlePrice(request, env)
+          : await handleMarket(env);
+        if (res.status === 200) {
+          const cacheable = new Response(res.body, res);
+          cacheable.headers.set('Cache-Control', 'public, max-age=20');
+          ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+          return cacheable;
+        }
+        return res;
       }
       if (url.pathname === '/analyze' && request.method === 'POST') {
         return await handleAnalyze(request, env);
