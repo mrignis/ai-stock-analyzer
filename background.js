@@ -74,13 +74,26 @@ function checkPrices() {
           chrome.storage.local.set({ priceAlerts: savedPrices });
           // Fire all collected notifications
           alertsToFire.forEach(function(a) {
-            // Stable ID per ticker — Chrome replaces old notification instead of stacking
-            chrome.notifications.create('alert_' + a.ticker, {
-              type: 'basic',
-              iconUrl: 'icons/icon128.png',
-              title: '📊 AI Stocks — ' + a.ticker,
-              message: a.reason,
-              priority: 2,
+            // Unique ID each time: Windows silently swallows a re-created
+            // notification with the SAME id (replaces it in the Action Center
+            // without showing a toast). Clear the ticker's previous toasts
+            // first so they don't stack, then create with a fresh id.
+            var prefix = 'alert_' + a.ticker;
+            chrome.notifications.getAll(function(all) {
+              Object.keys(all || {}).forEach(function(id) {
+                if (id.indexOf(prefix) === 0) chrome.notifications.clear(id);
+              });
+              chrome.notifications.create(prefix + '_' + Date.now(), {
+                type: 'basic',
+                iconUrl: 'icons/icon128.png',
+                title: '📊 AI Stocks — ' + a.ticker,
+                message: a.reason,
+                priority: 2,
+              }, function() {
+                if (chrome.runtime.lastError) {
+                  console.error('Notification failed:', chrome.runtime.lastError.message);
+                }
+              });
             });
           });
         }
