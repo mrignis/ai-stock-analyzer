@@ -588,7 +588,7 @@ function applyPriceToElements(d, priceId, pctId) {
 
 // Maps verdict color to its pill CSS class
 function pillClass(color) {
-  return pillClass(color);
+  return { green: 'pill-green', yellow: 'pill-yellow', red: 'pill-red', blue: 'pill-blue' }[color] || 'pill-blue';
 }
 
 // Unified "time ago" — long=true adds "тому" suffix (for alerts/news)
