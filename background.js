@@ -30,10 +30,11 @@ function fetchPrice(ticker, cb) {
 }
 
 function checkPrices() {
-  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold'], function(s) {
+  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold', 'priceTargets'], function(s) {
     var watchlist = s.watchlist || [];
     var savedPrices = s.priceAlerts || {};
     var threshold = s.alertThreshold || 3;
+    checkPriceTargets(s.priceTargets || []);
     if (!watchlist.length) return;
 
     var pending = watchlist.length;
@@ -109,6 +110,57 @@ function checkPrices() {
           }
         }
       });
+    });
+  });
+}
+
+// Price targets: "tell me when TSLA falls below $300" — one-shot alerts
+function checkPriceTargets(targets) {
+  if (!targets.length) return;
+  // De-duplicated tickers so one fetch covers multiple targets
+  var tickers = targets
+    .map(function(t) { return t.ticker; })
+    .filter(function(v, i, a) { return a.indexOf(v) === i; });
+  var prices = {};
+  var pending = tickers.length;
+
+  tickers.forEach(function(ticker) {
+    fetchPrice(ticker, function(info) {
+      if (info) prices[ticker] = info.price;
+      pending--;
+      if (pending > 0) return;
+
+      var remaining = [];
+      var hits = [];
+      targets.forEach(function(t) {
+        var cur = prices[t.ticker];
+        var hit = cur != null && (
+          (t.dir === 'below' && cur <= t.price) ||
+          (t.dir === 'above' && cur >= t.price)
+        );
+        if (hit) {
+          hits.push('🎯 ' + t.ticker + ' ' +
+            (t.dir === 'below' ? 'впав нижче' : 'зріс вище') + ' $' + t.price +
+            ' — зараз $' + cur.toFixed(2));
+        } else {
+          remaining.push(t); // not hit (or no price) — keep waiting
+        }
+      });
+
+      if (hits.length > 0) {
+        chrome.storage.local.set({ priceTargets: remaining }); // fired targets are one-shot
+        chrome.notifications.create('target_' + Date.now(), {
+          type: 'basic',
+          iconUrl: 'icons/icon128.png',
+          title: '🎯 AI Stocks — цінова ціль!',
+          message: hits.join('\n'),
+          priority: 1,
+        }, function() {
+          if (chrome.runtime.lastError) {
+            console.error('Target notification failed:', chrome.runtime.lastError.message);
+          }
+        });
+      }
     });
   });
 }

@@ -420,6 +420,22 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
     </div>
     <button class="btn-green btn-full" id="btn-save-threshold">Зберегти</button>
   </div>
+
+  <!-- Price targets: "tell me when TSLA falls below $300" -->
+  <div class="setup-box" style="margin-top:12px">
+    <p id="target-label">🎯 Цінові цілі:</p>
+    <div style="display:flex;gap:6px;margin-top:8px;margin-bottom:8px">
+      <input type="text" id="target-ticker" placeholder="TSLA" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px;font-family:var(--mono);font-size:12px;color:var(--text)">
+      <select id="target-dir" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer">
+        <option value="below">впаде нижче</option>
+        <option value="above">зросте вище</option>
+      </select>
+      <input type="text" id="target-price" placeholder="$" style="flex:1;min-width:60px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px;font-family:var(--mono);font-size:12px;color:var(--text)">
+    </div>
+    <button class="btn-green btn-full" id="btn-add-target">+ Додати ціль</button>
+    <div id="target-list" style="margin-top:8px"></div>
+  </div>
+
   <div id="alert-prices-list"></div>
 </div>
 

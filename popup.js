@@ -190,6 +190,8 @@ document.addEventListener('DOMContentLoaded', function() {
         toast(lang === 'ua' ? '✓ Поріг збережено: ' + val + '%' : '✓ Threshold saved: ' + val + '%');
       });
     });
+    document.getElementById('btn-add-target').addEventListener('click', addPriceTarget);
+    document.getElementById('target-price').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPriceTarget(); });
     document.getElementById('btn-check-now').addEventListener('click', function() {
       chrome.runtime.sendMessage({ action: 'checkNow' }, function() {
         var btn = document.getElementById('btn-check-now');
@@ -287,6 +289,11 @@ function applyLang() {
   document.getElementById('lbl-alerts-title').textContent = ua ? 'Алерти цін' : 'Price Alerts';
   document.getElementById('alerts-info').textContent = ua ? 'Отримуй сповіщення коли акції з Watchlist змінюються більше ніж на заданий %.' : 'Get notified when Watchlist stocks change more than the set %.';
   document.getElementById('threshold-label').textContent = ua ? 'Поріг сповіщення (% зміни):' : 'Alert threshold (% change):';
+  document.getElementById('target-label').textContent = ua ? '🎯 Цінові цілі:' : '🎯 Price targets:';
+  document.getElementById('btn-add-target').textContent = ua ? '+ Додати ціль' : '+ Add target';
+  var tdSel = document.getElementById('target-dir');
+  tdSel.options[0].text = ua ? 'впаде нижче' : 'falls below';
+  tdSel.options[1].text = ua ? 'зросте вище' : 'rises above';
   document.getElementById('btn-save-threshold').textContent = ua ? 'Зберегти' : 'Save';
   document.getElementById('btn-check-now').textContent = ua ? '↻ Перевірити' : '↻ Check now';
   document.getElementById('lbl-chat-ctx').textContent = ua ? 'Контекст:' : 'Context:';
@@ -1679,11 +1686,64 @@ function timeAgoNews(ts) {
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 function initAlerts() {
-  chrome.storage.local.get(['alertThreshold', 'priceAlerts'], function(s) {
+  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets'], function(s) {
     var threshold = s.alertThreshold || 3;
     document.getElementById('threshold-slider').value = threshold;
     document.getElementById('threshold-value').textContent = threshold + '%';
+    renderTargets(s.priceTargets || []);
     renderAlertPrices(s.priceAlerts || {});
+  });
+}
+
+// ── Price targets ("tell me when TSLA falls below $300") ─────────────────────
+function addPriceTarget() {
+  var ticker = document.getElementById('target-ticker').value.trim().toUpperCase();
+  var dir    = document.getElementById('target-dir').value;
+  var price  = parseFloat(document.getElementById('target-price').value.replace(',', '.').replace('$', ''));
+  if (!ticker || isNaN(price) || price <= 0) {
+    toast(lang === 'ua' ? '⚠ Вкажи тікер і ціну' : '⚠ Enter ticker and price');
+    return;
+  }
+  chrome.storage.local.get(['priceTargets'], function(s) {
+    var targets = s.priceTargets || [];
+    targets.push({ ticker: ticker, dir: dir, price: price, createdAt: Date.now() });
+    chrome.storage.local.set({ priceTargets: targets }, function() {
+      document.getElementById('target-ticker').value = '';
+      document.getElementById('target-price').value = '';
+      renderTargets(targets);
+      toast('🎯 ' + ticker + ' ' + (dir === 'below' ? '↓' : '↑') + ' ' + price);
+    });
+  });
+}
+
+function removePriceTarget(idx) {
+  chrome.storage.local.get(['priceTargets'], function(s) {
+    var targets = s.priceTargets || [];
+    targets.splice(idx, 1);
+    chrome.storage.local.set({ priceTargets: targets }, function() { renderTargets(targets); });
+  });
+}
+
+function renderTargets(targets) {
+  var el = document.getElementById('target-list');
+  if (!targets.length) { el.innerHTML = ''; return; }
+  var html = '';
+  targets.forEach(function(t, i) {
+    var arrow = t.dir === 'below' ? '↓' : '↑';
+    var word  = t.dir === 'below'
+      ? (lang === 'ua' ? 'нижче' : 'below')
+      : (lang === 'ua' ? 'вище' : 'above');
+    html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:var(--r);padding:8px 12px;margin-bottom:6px">' +
+      '<span style="font-family:var(--mono);font-size:12px;color:var(--green);width:56px">' + t.ticker + '</span>' +
+      '<span style="font-family:var(--mono);font-size:11px;color:var(--text)">' + arrow + ' ' + word + ' $' + t.price + '</span>' +
+      '<button class="target-remove" data-idx="' + i + '" style="margin-left:auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:11px">✕</button>' +
+    '</div>';
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.target-remove').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      removePriceTarget(parseInt(this.getAttribute('data-idx')));
+    });
   });
 }
 
