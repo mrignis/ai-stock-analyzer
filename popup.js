@@ -336,6 +336,16 @@ function applyLang() {
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
+// Drops cached prices for the given tickers so the next render fetches fresh
+function freshPrices(tickers, cb) {
+  var keys = [];
+  tickers.forEach(function(t) {
+    if (keys.indexOf('c_price_' + t) === -1) keys.push('c_price_' + t);
+  });
+  if (!keys.length) { cb(); return; }
+  chrome.storage.local.remove(keys, cb);
+}
+
 function showPanel(id) {
   var panels = document.querySelectorAll('.panel');
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active');
@@ -343,8 +353,21 @@ function showPanel(id) {
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
   document.getElementById('panel-' + id).classList.add('active');
   document.getElementById('tab-' + id).classList.add('active');
-  if (id === 'search') { renderHomeWatchlist(); fetchMarketData(); }
-  if (id === 'watchlist') renderWatchlist();
+  // Switching panels always shows FRESH prices (user request: no stale
+  // numbers when hopping between home and watchlist)
+  var wlTickers = watchlist.map(function(w) { return w.ticker; });
+  if (id === 'search') {
+    freshPrices(wlTickers, renderHomeWatchlist);
+    fetchMarketData();
+  }
+  if (id === 'watchlist') {
+    var pfTickers = portfolio.map(function(p) { return p.ticker; });
+    freshPrices(wlTickers.concat(pfTickers), function() {
+      var pfVisible = document.getElementById('portfolio-panel').style.display !== 'none';
+      if (pfVisible) renderPortfolio();
+      else renderWatchlist();
+    });
+  }
   if (id === 'history') renderHistory();
   if (id === 'news') initNews();
   if (id === 'alerts') initAlerts();
