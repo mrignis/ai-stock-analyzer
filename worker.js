@@ -238,6 +238,23 @@ async function fetchCompanyInfo(env, t) {
   return parts.join(' ');
 }
 
+// Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
+// "servicenow" → NOW. Noise queries return empty — safe to call with raw text.
+async function resolveTickerByName(text) {
+  try {
+    const r = await fetch(
+      'https://query1.finance.yahoo.com/v1/finance/search?q=' +
+      encodeURIComponent(text.slice(0, 80)) + '&quotesCount=1&newsCount=0',
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const d = await r.json();
+    const q = (d.quotes || [])[0];
+    // High score = confident match; skip foreign listings (RACE.MI etc.)
+    if (q && q.symbol && (q.score || 0) > 10000 && !q.symbol.includes('.')) return q.symbol;
+  } catch { /* registry is optional — detection just stays empty */ }
+  return null;
+}
+
 // Well-known company names → tickers, so "чому Microsoft падає" works without a ticker
 const NAME_TO_TICKER = {
   'MICROSOFT': 'MSFT', 'APPLE': 'AAPL', 'TESLA': 'TSLA', 'GOOGLE': 'GOOGL',
@@ -515,6 +532,13 @@ async function handleChat(request, env) {
   const potentialTickers = [...new Set(
     rawTokens.filter(t => !SKIP_WORDS.has(t)).concat(namedTickers)
   )].slice(0, 3);
+
+  // No explicit ticker? Ask Yahoo's registry by company name from the
+  // current question ("скільки коштує ferrari" → RACE)
+  if (potentialTickers.length === 0) {
+    const resolved = await resolveTickerByName(lastMsg);
+    if (resolved) potentialTickers.push(resolved.toUpperCase());
+  }
 
   let liveData = '';
   let companyInfo = '';
