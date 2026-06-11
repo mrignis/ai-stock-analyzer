@@ -500,7 +500,7 @@ async function handleChat(request, env) {
     companyInfo,
     companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For stable historical facts (founders, founding year, headquarters) you may also use your general knowledge when confident. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
-    'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks, no bullet symbols. Use line breaks between paragraphs.',
+    'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
   const groqMessages = [

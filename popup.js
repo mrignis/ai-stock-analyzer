@@ -1238,7 +1238,8 @@ function renderChatText(text) {
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/^#+\s*/gm, '')     // only strip # at start of a line, not mid-sentence
-    .replace(/`(.+?)`/g, '$1');
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/^\*\s+/gm, '• ');  // leftover "* " list markers → clean bullet
   var parts = clean.split(/\n{2,}/);
   return parts.map(function(p) {
     var t = p.replace(/\n/g, '<br>').trim();
