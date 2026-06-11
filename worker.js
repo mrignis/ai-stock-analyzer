@@ -107,6 +107,9 @@ export default {
       if (url.pathname === '/candle' && request.method === 'GET') {
         return await handleCandle(request, env);
       }
+      if (url.pathname === '/fx' && request.method === 'GET') {
+        return await handleFx(request);
+      }
       return json({ error: 'Not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -516,6 +519,29 @@ async function handleChat(request, env) {
   }
 
   return json({ reply });
+}
+
+// ── /fx?to=UAH — USD → currency rate ──────────────────────────────────────────
+// Chain (claude-helper design): Yahoo "UAH=X" → NBU API (for UAH) → static emergency rates
+const FX_STATIC = { UAH: 41.5, EUR: 0.92, CAD: 1.36 };
+
+async function handleFx(request) {
+  const to = (new URL(request.url).searchParams.get('to') || '').toUpperCase();
+  if (!to) return json({ error: 'Missing to' }, 400);
+  if (to === 'USD') return json({ rate: 1, source: 'fixed' });
+  if (!(to in FX_STATIC)) return json({ error: 'Unsupported currency' }, 400);
+
+  const q = await yahooQuote(to + '=X'); // Yahoo: "UAH=X" is USD→UAH
+  if (q && q.c > 0) return json({ rate: q.c, source: 'yahoo' });
+
+  if (to === 'UAH') {
+    try {
+      const r = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=USD&json');
+      const d = await r.json();
+      if (Array.isArray(d) && d[0] && d[0].rate > 0) return json({ rate: d[0].rate, source: 'nbu' });
+    } catch { /* NBU is optional — fall through to static */ }
+  }
+  return json({ rate: FX_STATIC[to], source: 'static' });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

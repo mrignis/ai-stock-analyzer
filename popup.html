@@ -434,6 +434,18 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
   <div class="divider"></div>
 
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;margin-bottom:6px">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="lbl-currency">💱 Валюта цін</span>
+    <select id="currency-select" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer">
+      <option value="USD">USD $</option>
+      <option value="UAH">UAH ₴</option>
+      <option value="EUR">EUR €</option>
+      <option value="CAD">CAD C$</option>
+    </select>
+  </div>
+
+  <div class="divider"></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;margin-bottom:6px">
     <span style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="lbl-pin">📌 Відкрити у вікні</span>
     <button id="btn-pin-tab" style="background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:4px 14px;font-family:var(--mono);font-size:11px;color:var(--text);cursor:pointer;transition:all 0.2s">↗ Відкрити</button>
   </div>

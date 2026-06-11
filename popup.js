@@ -5,6 +5,8 @@ var WORKER_URL = 'https://stock-ai-analyzer.chelb-dev.workers.dev';
 
 var lang = 'ua';
 var theme = 'dark';
+var currency = 'USD'; // display currency for all prices
+var fxRate = 1;       // USD → currency multiplier (loaded from /fx)
 var isTabMode = (new URLSearchParams(window.location.search).get('tab') === '1');
 var currentTicker = '';
 var currentData = null;
@@ -20,7 +22,7 @@ var currentConvId = null;
 var convListVisible = false;
 var chatSending = false; // guard against concurrent send requests
 
-function loadAll(cb) { chrome.storage.local.get(['lang','theme','watchlist','history','conversations','currentConvId','portfolio'], cb); }
+function loadAll(cb) { chrome.storage.local.get(['lang','theme','currency','watchlist','history','conversations','currentConvId','portfolio'], cb); }
 function save(obj) { chrome.storage.local.set(obj); }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -70,6 +72,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.conversations) conversations = s.conversations;
     if (s.currentConvId) currentConvId = s.currentConvId;
     if (s.portfolio) portfolio = s.portfolio;
+    if (s.currency && CURRENCY_META[s.currency]) currency = s.currency;
+    document.getElementById('currency-select').value = currency;
     applyTheme();
     cachePrune(); // clean up stale cache entries on each startup
 
@@ -91,8 +95,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     applyLang();
-    fetchMarketData();
-    renderHomeWatchlist();
+    loadFxRate(function() {
+      fetchMarketData();
+      renderHomeWatchlist();
+    });
 
     document.getElementById('nav-logo').addEventListener('click', function() {
       if (currentAbort) { currentAbort.abort(); currentAbort = null; }
@@ -208,6 +214,21 @@ document.addEventListener('DOMContentLoaded', function() {
       }, function() { window.close(); });
     });
 
+    // Currency select — reload rate, then re-render every visible price surface
+    document.getElementById('currency-select').addEventListener('change', function() {
+      currency = this.value;
+      save({ currency: currency });
+      loadFxRate(function() {
+        fetchMarketData();
+        renderHomeWatchlist();
+        renderWatchlist();
+        if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
+        if (currentData && currentData._quote) renderPrice(currentData._quote);
+        chrome.storage.local.get(['priceAlerts'], function(s) { renderAlertPrices(s.priceAlerts || {}); });
+        toast(currency);
+      });
+    });
+
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', function() {
       theme = theme === 'dark' ? 'light' : 'dark';
@@ -285,6 +306,8 @@ function applyLang() {
   document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
   var lblBmac = document.getElementById('lbl-bmac');
   if (lblBmac) lblBmac.textContent = ua ? 'Підтримати проект' : 'Support the project';
+  var lblCurrency = document.getElementById('lbl-currency');
+  if (lblCurrency) lblCurrency.textContent = ua ? '💱 Валюта цін' : '💱 Price currency';
   var lblPin = document.getElementById('lbl-pin');
   if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in window';
   var btnPin = document.getElementById('btn-pin-tab');
@@ -355,9 +378,7 @@ function renderMarketCards(data) {
     }
     var up = d.pct >= 0;
     var color = up ? 'var(--green)' : 'var(--red)';
-    var price = d.c >= 1000
-      ? '$' + Math.round(d.c).toLocaleString()
-      : '$' + d.c.toFixed(2);
+    var price = fmtMoney(d.c);
     html += '<div class="mcard" data-card="' + k + '" style="cursor:pointer" title="Аналіз ' + CARD_TICKERS[k] + '">' +
       '<div class="mcard-label">' + icons[k] + ' ' + d.label + '</div>' +
       '<div class="mcard-price">' + price + '</div>' +
@@ -523,10 +544,10 @@ function renderPrice(q) {
   var change = q.pc > 0 ? q.c - q.pc : 0;
   var pct    = q.pc > 0 ? (change / q.pc) * 100 : 0;
   showPrice({
-    price: formatPrice(q.c),
-    change: (change >= 0 ? '+' : '') + formatChange(change),
+    price: formatPrice(q.c * fxRate),
+    change: (change >= 0 ? '+' : '') + formatChange(change * fxRate),
     pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
-    currency: 'USD',
+    currency: currency,
   });
 }
 
@@ -580,10 +601,43 @@ function applyPriceToElements(d, priceId, pctId) {
   if (!priceEl || !pctEl) return;
   var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
   var up = pct >= 0;
-  priceEl.textContent = '$' + formatPrice(d.c);
+  priceEl.textContent = fmtMoney(d.c);
   priceEl.style.color = 'var(--text)';
   pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
   pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+}
+
+// ── Currency ──────────────────────────────────────────────────────────────────
+var CURRENCY_META = {
+  USD: { sym: '$',  post: false },
+  UAH: { sym: '₴',  post: true  },  // 4 150 ₴
+  EUR: { sym: '€',  post: false },
+  CAD: { sym: 'C$', post: false },
+};
+var CACHE_FX_TTL = 60 * 60 * 1000; // 1 год
+
+// Formats a USD amount in the selected display currency
+function fmtMoney(usd) {
+  if (usd == null || isNaN(usd)) return '—';
+  var m = CURRENCY_META[currency] || CURRENCY_META.USD;
+  var num = formatPrice(usd * fxRate);
+  return m.post ? num + ' ' + m.sym : m.sym + num;
+}
+
+// Loads USD→currency rate (cache 1h → /fx → fallback 1:1), then calls cb
+function loadFxRate(cb) {
+  if (currency === 'USD') { fxRate = 1; if (cb) cb(); return; }
+  cacheGet('fx_' + currency, CACHE_FX_TTL, function(cached) {
+    if (cached) { fxRate = cached; if (cb) cb(); return; }
+    fetch(WORKER_URL + '/fx?to=' + currency)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        fxRate = (d && d.rate > 0) ? d.rate : 1;
+        if (d && d.rate > 0) cacheSet('fx_' + currency, d.rate);
+        if (cb) cb();
+      })
+      .catch(function() { fxRate = 1; if (cb) cb(); });
+  });
 }
 
 // Maps verdict color to its pill CSS class
@@ -1332,7 +1386,7 @@ function renderPortfolio() {
     html += '<div class="pf-row" id="pf-row-' + i + '">' +
       '<span class="pf-ticker">' + p.ticker + '</span>' +
       '<div class="pf-info">' +
-        '<div class="pf-shares">' + p.shares + ' ' + (lang === 'ua' ? 'акцій' : 'shares') + ' · $' + p.buyPrice.toFixed(2) + '</div>' +
+        '<div class="pf-shares">' + p.shares + ' ' + (lang === 'ua' ? 'акцій' : 'shares') + ' · ' + fmtMoney(p.buyPrice) + '</div>' +
         '<div class="pf-prices" id="pf-price-' + i + '" style="color:var(--dim)">—</div>' +
       '</div>' +
       '<div class="pf-pl" id="pf-pl-' + i + '" style="color:var(--dim)">—</div>' +
@@ -1370,11 +1424,11 @@ function renderPortfolio() {
       var priceEl = document.getElementById('pf-price-' + i);
       var plEl    = document.getElementById('pf-pl-' + i);
       if (priceEl) {
-        priceEl.textContent = '$' + formatPrice(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
+        priceEl.textContent = fmtMoney(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
         priceEl.style.color = 'var(--text)';
       }
       if (plEl) {
-        plEl.innerHTML = '<span style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + '</span>' +
+        plEl.innerHTML = '<span style="color:' + color + '">' + sign + fmtMoney(Math.abs(pl)) + '</span>' +
           '<br><span style="font-size:10px;color:' + color + '">' + sign + plPct.toFixed(1) + '%</span>';
       }
       totalCurrent += current;
@@ -1396,9 +1450,9 @@ function renderPortfolio() {
       : '';
     summEl.style.display = 'block';
     summEl.innerHTML = '<div class="pf-summary-row">' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalInvested).toLocaleString() + '</div></div>' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">$' + Math.round(totalCurrent).toLocaleString() + '</div></div>' +
-      '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + '$' + Math.round(Math.abs(pl)).toLocaleString() + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">' + fmtMoney(totalInvested) + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">' + fmtMoney(totalCurrent) + '</div></div>' +
+      '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + fmtMoney(Math.abs(pl)) + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
     '</div>' + partial;
   }
 }
@@ -1537,7 +1591,7 @@ function renderAlertPrices(priceAlerts) {
       var up = info.pct >= 0;
       var color = up ? 'var(--green)' : 'var(--red)';
       var arrow = up ? '▲' : '▼';
-      html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text)">$' + info.price.toFixed(2) + '</span>';
+      html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + fmtMoney(info.price) + '</span>';
       html += '<span style="font-family:var(--mono);font-size:11px;color:' + color + '">' + arrow + ' ' + (up ? '+' : '') + info.pct.toFixed(1) + '%</span>';
       var ago = Math.floor((Date.now() - info.time) / 60000);
       var timeStr = ago < 1 ? (lang === 'ua' ? 'щойно' : 'just now') : ago + (lang === 'ua' ? ' хв тому' : 'm ago');
