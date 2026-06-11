@@ -609,10 +609,27 @@ function applyPriceToElements(d, priceId, pctId) {
 
 // ── Currency ──────────────────────────────────────────────────────────────────
 var CURRENCY_META = {
-  USD: { sym: '$',  post: false },
-  UAH: { sym: '₴',  post: true  },  // 4 150 ₴
-  EUR: { sym: '€',  post: false },
-  CAD: { sym: 'C$', post: false },
+  USD: { sym: '$',   post: false },
+  UAH: { sym: '₴',   post: true  },  // 4 150 ₴
+  EUR: { sym: '€',   post: false },
+  CAD: { sym: 'C$',  post: false },
+  GBP: { sym: '£',   post: false },
+  PLN: { sym: 'zł',  post: true  },
+  CHF: { sym: 'CHF', post: true  },
+  JPY: { sym: '¥',   post: false },
+  CNY: { sym: '¥',   post: false },
+  AUD: { sym: 'A$',  post: false },
+  CZK: { sym: 'Kč',  post: true  },
+  SEK: { sym: 'kr',  post: true  },
+  NOK: { sym: 'kr',  post: true  },
+  DKK: { sym: 'kr',  post: true  },
+  TRY: { sym: '₺',   post: false },
+  INR: { sym: '₹',   post: false },
+  BRL: { sym: 'R$',  post: false },
+  MXN: { sym: 'MX$', post: false },
+  KRW: { sym: '₩',   post: false },
+  ILS: { sym: '₪',   post: false },
+  AED: { sym: 'AED', post: true  },
 };
 var CACHE_FX_TTL = 60 * 60 * 1000; // 1 год
 

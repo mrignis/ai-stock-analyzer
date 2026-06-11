@@ -523,13 +523,17 @@ async function handleChat(request, env) {
 
 // ── /fx?to=UAH — USD → currency rate ──────────────────────────────────────────
 // Chain (claude-helper design): Yahoo "UAH=X" → NBU API (for UAH) → static emergency rates
-const FX_STATIC = { UAH: 41.5, EUR: 0.92, CAD: 1.36 };
+const FX_STATIC = {
+  UAH: 41.5, EUR: 0.92, CAD: 1.36, GBP: 0.79, PLN: 4.0, JPY: 150, CHF: 0.88,
+  AUD: 1.5, CZK: 23, SEK: 10.5, NOK: 10.7, DKK: 6.9, TRY: 34, INR: 84,
+  CNY: 7.2, BRL: 5.6, MXN: 18, KRW: 1380, ILS: 3.7, AED: 3.67,
+};
 
 async function handleFx(request) {
   const to = (new URL(request.url).searchParams.get('to') || '').toUpperCase();
   if (!to) return json({ error: 'Missing to' }, 400);
   if (to === 'USD') return json({ rate: 1, source: 'fixed' });
-  if (!(to in FX_STATIC)) return json({ error: 'Unsupported currency' }, 400);
+  if (!/^[A-Z]{3}$/.test(to)) return json({ error: 'Unsupported currency' }, 400);
 
   const q = await yahooQuote(to + '=X'); // Yahoo: "UAH=X" is USD→UAH
   if (q && q.c > 0) return json({ rate: q.c, source: 'yahoo' });
@@ -541,7 +545,8 @@ async function handleFx(request) {
       if (Array.isArray(d) && d[0] && d[0].rate > 0) return json({ rate: d[0].rate, source: 'nbu' });
     } catch { /* NBU is optional — fall through to static */ }
   }
-  return json({ rate: FX_STATIC[to], source: 'static' });
+  if (to in FX_STATIC) return json({ rate: FX_STATIC[to], source: 'static' });
+  return json({ error: 'Rate unavailable' }, 502);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
