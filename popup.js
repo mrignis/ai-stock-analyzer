@@ -199,10 +199,8 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.textContent = lang === 'ua' ? '✓ Перевірено' : '✓ Checked';
         setTimeout(function() {
           btn.textContent = lang === 'ua' ? '↻ Перевірити' : '↻ Check now';
-          // Refresh alert list without re-registering event listeners
-          chrome.storage.local.get(['priceAlerts'], function(s) {
-            renderAlertPrices(s.priceAlerts || {});
-          });
+          // Refresh prices AND targets — fired one-shot targets disappear from the list
+          initAlerts();
         }, 1500);
       });
     });
