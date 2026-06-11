@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.conversations) conversations = s.conversations;
     if (s.currentConvId) currentConvId = s.currentConvId;
     if (s.portfolio) portfolio = s.portfolio;
+    mergePortfolioDuplicates();
     if (s.currency && CURRENCY_META[s.currency]) currency = s.currency;
     document.getElementById('currency-select').value = currency;
     applyTheme();
@@ -1364,6 +1365,30 @@ function appendChatMsg(role, content, isTyping) {
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 function savePortfolio() { save({ portfolio: portfolio }); }
 
+// One-time cleanup: merge duplicate tickers added before the merge feature
+// existed (weighted-average buy price). Runs on startup.
+function mergePortfolioDuplicates() {
+  var byTicker = {};
+  var merged = [];
+  var hadDuplicates = false;
+  portfolio.forEach(function(p) {
+    var ex = byTicker[p.ticker];
+    if (ex) {
+      var total = ex.shares + p.shares;
+      ex.buyPrice = (ex.shares * ex.buyPrice + p.shares * p.buyPrice) / total;
+      ex.shares = total;
+      hadDuplicates = true;
+    } else {
+      byTicker[p.ticker] = p;
+      merged.push(p);
+    }
+  });
+  if (hadDuplicates) {
+    portfolio = merged;
+    savePortfolio();
+  }
+}
+
 function addPortfolioPosition() {
   var ticker   = document.getElementById('pf-ticker').value.trim().toUpperCase();
   var shares   = parseFloat(document.getElementById('pf-shares').value.replace(',', '.'));
@@ -1372,7 +1397,16 @@ function addPortfolioPosition() {
     toast(lang === 'ua' ? '⚠ Заповни всі поля' : '⚠ Fill all fields');
     return;
   }
-  portfolio.push({ ticker: ticker, shares: shares, buyPrice: buyPrice, addedAt: Date.now() });
+  // Buying more of an existing ticker merges into one position
+  // with a weighted-average buy price (user request)
+  var existing = portfolio.find(function(p) { return p.ticker === ticker; });
+  if (existing) {
+    var totalShares = existing.shares + shares;
+    existing.buyPrice = (existing.shares * existing.buyPrice + shares * buyPrice) / totalShares;
+    existing.shares = totalShares;
+  } else {
+    portfolio.push({ ticker: ticker, shares: shares, buyPrice: buyPrice, addedAt: Date.now() });
+  }
   savePortfolio();
   document.getElementById('pf-ticker').value = '';
   document.getElementById('pf-shares').value = '';
