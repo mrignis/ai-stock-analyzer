@@ -141,6 +141,14 @@ function pctChange(c, pc) {
   return pc > 0 ? ((c - pc) / pc * 100) : 0;
 }
 
+// Live price with full fallback chain: Finnhub (crypto-mapped) → Yahoo Finance.
+// Returns { c, pc } or null. Used by chat so BTC etc. also get live data.
+async function getLivePrice(env, t) {
+  const fh = await finnhubQuote(env, CRYPTO_MAP[t] || t);
+  if (fh && fh.c && fh.c > 0) return { c: fh.c, pc: fh.pc };
+  return await yahooQuote(CRYPTO_MAP[t] ? t + '-USD' : t);
+}
+
 // Deep company info for chat: profile + recent news + Wikipedia background.
 // Returns a compact string for the system prompt ('' when nothing found).
 async function fetchCompanyInfo(env, t) {
@@ -454,10 +462,11 @@ async function handleChat(request, env) {
   const lastMsg = safeMessages[safeMessages.length - 1]?.content || '';
   const upperMsg = lastMsg.toUpperCase();
   const rawTokens = upperMsg.match(/\b[A-Z]{2,5}\b/g) || [];
-  // Also catch well-known company names written in any case ("Microsoft", "тесла" won't match — Latin only)
-  const namedTickers = Object.keys(NAME_TO_TICKER)
-    .filter(name => upperMsg.includes(name))
-    .map(name => NAME_TO_TICKER[name]);
+  // Also catch well-known company/crypto names ("Microsoft" → MSFT, "BITCOIN" → BTC).
+  // Word boundaries so "METAL" doesn't trigger META, "PINEAPPLE" doesn't trigger APPLE.
+  const namedTickers = [...Object.entries(NAME_TO_TICKER), ...Object.entries(CRYPTO_NAMES)]
+    .filter(([name]) => new RegExp('\\b' + name + '\\b').test(upperMsg))
+    .map(([, t]) => t);
   const potentialTickers = [...new Set(
     rawTokens.filter(t => !SKIP_WORDS.has(t)).concat(namedTickers)
   )].slice(0, 3);
@@ -466,7 +475,7 @@ async function handleChat(request, env) {
   let companyInfo = '';
   if (potentialTickers.length > 0) {
     const results = await Promise.all(
-      potentialTickers.map(async t => ({ ticker: t, d: await finnhubQuote(env, t) }))
+      potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) }))
     );
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
