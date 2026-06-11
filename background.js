@@ -37,7 +37,8 @@ function checkPrices() {
     if (!watchlist.length) return;
 
     var pending = watchlist.length;
-    var alertsToFire = []; // collect alerts — fire only after all fetches done
+    var alertsToFire = []; // tickers that crossed the threshold
+    var allLines = [];     // ALL watchlist tickers — the toast shows the full picture
 
     watchlist.forEach(function(item) {
       var ticker = item.ticker;
@@ -66,6 +67,12 @@ function checkPrices() {
           }
 
           if (shouldAlert) alertsToFire.push({ ticker: ticker, reason: reason });
+
+          // Line for the combined toast — every ticker, movers highlighted
+          allLines.push(
+            (shouldAlert ? (info.pct > 0 ? '📈' : '📉') : '▫') + ' ' + ticker + ' ' +
+            (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% · $' + info.price.toFixed(2)
+          );
         }
 
         pending--;
@@ -78,16 +85,15 @@ function checkPrices() {
           // old ones cleared, and the toast is force-closed after 7s because
           // Windows otherwise keeps it on screen too long.
           if (alertsToFire.length > 0) {
-            var title = alertsToFire.length === 1
-              ? '📊 AI Stocks — ' + alertsToFire[0].ticker
-              : '📊 AI Stocks — алерти (' + alertsToFire.length + ')';
-            var message = alertsToFire.map(function(a) { return a.reason; }).join('\n');
-            var notifId = 'alerts_' + Date.now();
+            var title = '📊 AI Stocks — алерти (' + alertsToFire.length + ')';
+            // Full watchlist in one toast (user request): movers with 📈/📉, rest with ▫.
+            // No auto-dismiss — the user closes it himself.
+            var message = allLines.slice(0, 6).join('\n');
             chrome.notifications.getAll(function(all) {
               Object.keys(all || {}).forEach(function(id) {
                 if (id.indexOf('alert') === 0) chrome.notifications.clear(id);
               });
-              chrome.notifications.create(notifId, {
+              chrome.notifications.create('alerts_' + Date.now(), {
                 type: 'basic',
                 iconUrl: 'icons/icon128.png',
                 title: title,
@@ -96,10 +102,7 @@ function checkPrices() {
               }, function() {
                 if (chrome.runtime.lastError) {
                   console.error('Notification failed:', chrome.runtime.lastError.message);
-                  return;
                 }
-                // Force-dismiss the toast; it stays available in the Action Center history
-                setTimeout(function() { chrome.notifications.clear(notifId); }, 7000);
               });
             });
           }
