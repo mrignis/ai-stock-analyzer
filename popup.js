@@ -82,8 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('chat-conv-title').textContent = conv.title || 'Діалог';
         if (chatContext) {
           var ticker = chatContext.split(':')[0];
-          document.getElementById('chat-ctx-ticker').textContent = ticker;
-          document.getElementById('chat-ctx-bar').style.display = 'flex';
+          setCtxBar(ticker);
         }
         chatHistory.forEach(function(msg) {
           appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
@@ -396,7 +395,7 @@ function renderHomeWatchlist() {
   var shown = watchlist.slice(0, 4);
   var html = '';
   shown.forEach(function(w) {
-    var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
+    var pill = pillClass(w.color);
     html += '<div class="hwl-item" data-ticker="' + w.ticker + '">' +
       '<span class="hwl-ticker">' + w.ticker + '</span>' +
       '<span class="hwl-price" id="hwp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
@@ -587,6 +586,11 @@ function applyPriceToElements(d, priceId, pctId) {
   pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
 }
 
+// Maps verdict color to its pill CSS class
+function pillClass(color) {
+  return pillClass(color);
+}
+
 // Unified "time ago" — long=true adds "тому" suffix (for alerts/news)
 function timeAgo(ts, long) {
   var diff = Math.floor((Date.now() - ts) / 60000);
@@ -767,9 +771,8 @@ function renderResult(ticker, d) {
   document.getElementById('r-risks').textContent = d.risks;
   document.getElementById('r-forecast').textContent = d.forecast;
   document.getElementById('r-conclusion').textContent = d.conclusion;
-  var pillMap = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' };
   var vEl = document.getElementById('r-verdict');
-  vEl.textContent = d.verdict; vEl.className = 'verdict-pill ' + (pillMap[d.color] || 'pill-blue');
+  vEl.textContent = d.verdict; vEl.className = 'verdict-pill ' + pillClass(d.color);
   var sMap = {
     green:  'background:var(--green-dim);border:1px solid var(--green-border);color:var(--green)',
     yellow: 'background:var(--yellow-dim);border:1px solid var(--yellow-border);color:var(--yellow)',
@@ -902,7 +905,7 @@ function renderWatchlist() {
   var html = '';
   for (var i = 0; i < watchlist.length; i++) {
     var w = watchlist[i];
-    var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
+    var pill = pillClass(w.color);
     html += '<div class="watch-item" data-ticker="' + w.ticker + '">' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
       '<div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div>' +
@@ -952,7 +955,7 @@ function renderHistory() {
   if (!historyList.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🕐</div><p>' + (lang === 'ua' ? 'Історія порожня.' : 'History is empty.') + '</p></div>'; return; }
   var html = '';
   for (var i = 0; i < historyList.length; i++) {
-    var h = historyList[i]; var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[h.color] || 'pill-blue';
+    var h = historyList[i]; var pill = pillClass(h.color);
     var diff = Math.floor((Date.now() - h.t) / 60000);
     var time = diff < 1    ? (lang === 'ua' ? 'Щойно' : 'Just now')
              : diff < 60   ? diff + (lang === 'ua' ? ' хв' : 'm ago')
@@ -976,6 +979,18 @@ function toast(msg) {
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
+
+// Shows ctx bar with ticker, or hides it when ticker is falsy
+function setCtxBar(ticker) {
+  document.getElementById('chat-ctx-ticker').textContent = ticker || '';
+  document.getElementById('chat-ctx-bar').style.display = ticker ? 'flex' : 'none';
+}
+
+function welcomeHtml(text) {
+  return '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div>' +
+    '<p id="lbl-chat-welcome">' + text + '</p></div>';
+}
+
 function saveConversations() {
   save({ conversations: conversations, currentConvId: currentConvId });
 }
@@ -1004,11 +1019,9 @@ function newChat() {
 
   // Reset UI
   document.getElementById('chat-conv-title').textContent = conv.title;
-  document.getElementById('chat-ctx-bar').style.display = 'none';
-  document.getElementById('chat-ctx-ticker').textContent = '';
+  setCtxBar(null);
   document.getElementById('chat-messages').innerHTML =
-    '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div>' +
-    '<p id="lbl-chat-welcome">' + (lang === 'ua' ? 'Привіт! Запитай мене про будь-яку акцію або ринок.' : 'Hi! Ask me about any stock or market.') + '</p></div>';
+    welcomeHtml(lang === 'ua' ? 'Привіт! Запитай мене про будь-яку акцію або ринок.' : 'Hi! Ask me about any stock or market.');
 
   // Hide conv list if visible
   if (convListVisible) toggleConvList();
@@ -1079,19 +1092,13 @@ function loadConversation(id) {
   document.getElementById('chat-conv-title').textContent = conv.title;
 
   // Restore context bar
-  if (chatContext) {
-    document.getElementById('chat-ctx-ticker').textContent = chatContext.split(':')[0];
-    document.getElementById('chat-ctx-bar').style.display = 'flex';
-  } else {
-    document.getElementById('chat-ctx-bar').style.display = 'none';
-  }
+  setCtxBar(chatContext ? chatContext.split(':')[0] : null);
 
   // Restore messages
   document.getElementById('chat-messages').innerHTML = '';
   if (chatHistory.length === 0) {
     document.getElementById('chat-messages').innerHTML =
-      '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div><p>' +
-      (lang === 'ua' ? 'Продовжуй діалог...' : 'Continue the conversation...') + '</p></div>';
+      welcomeHtml(lang === 'ua' ? 'Продовжуй діалог...' : 'Continue the conversation...');
   } else {
     chatHistory.forEach(function(msg) {
       appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
@@ -1113,7 +1120,7 @@ function deleteConversation(id) {
       chatHistory = [];
       chatContext = null;
       document.getElementById('chat-conv-title').textContent = lang === 'ua' ? 'Новий діалог' : 'New chat';
-      document.getElementById('chat-ctx-bar').style.display = 'none';
+      setCtxBar(null);
     }
   }
   saveConversations();
@@ -1130,15 +1137,13 @@ function setChatContext(ticker, data) {
     ', risk=' + data.risk +
     (data.what ? ', company: ' + data.what : '') +
     '. Forecast: ' + data.forecast;
-  document.getElementById('chat-ctx-ticker').textContent = ticker;
-  document.getElementById('chat-ctx-bar').style.display = 'flex';
+  setCtxBar(ticker);
   saveCurrentConv();
 }
 
 function clearChatContext() {
   chatContext = null;
-  document.getElementById('chat-ctx-bar').style.display = 'none';
-  document.getElementById('chat-ctx-ticker').textContent = '';
+  setCtxBar(null);
   saveCurrentConv();
 }
 
@@ -1522,7 +1527,7 @@ function renderAlertPrices(priceAlerts) {
   var html = '<div style="margin-top:12px"><p style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">' + (lang === 'ua' ? 'Останні ціни' : 'Last prices') + '</p>';
   watchlist.forEach(function(w) {
     var info = priceAlerts[w.ticker];
-    var pill = { green:'pill-green', yellow:'pill-yellow', red:'pill-red', blue:'pill-blue' }[w.color] || 'pill-blue';
+    var pill = pillClass(w.color);
     html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:var(--r);padding:9px 12px;margin-bottom:6px">';
     html += '<span style="font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green);width:50px">' + w.ticker + '</span>';
     if (info) {
