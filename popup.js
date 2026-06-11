@@ -522,6 +522,10 @@ function runAnalysis() {
     document.getElementById('loading-state').style.display = 'block';
     document.getElementById('loading-msg').textContent = (lang === 'ua' ? 'Аналізую ' : 'Analyzing ') + raw + '...';
 
+    // Price arrives in ~0.3s — show it immediately while the AI (3-5s)
+    // is still thinking, so the screen is never "all skeleton"
+    fetchFreshPrice(raw, null);
+
     var signal = currentAbort.signal;
     // Auto-abort after 45s so the loading spinner never hangs forever
     var timeoutId = setTimeout(function() {
