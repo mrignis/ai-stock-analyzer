@@ -262,10 +262,6 @@ function applyLang() {
   document.getElementById('analyze-btn').textContent = ua ? 'Аналіз' : 'Analyze';
   document.getElementById('lbl-popular').textContent = ua ? 'Популярні:' : 'Popular:';
   document.getElementById('lbl-market').textContent = ua ? 'Ринок' : 'Market';
-  var hwlEl = document.getElementById('lbl-home-wl');
-  if (hwlEl) hwlEl.textContent = ua ? 'Watchlist' : 'Watchlist';
-  var emptyTextEl = document.getElementById('empty-text');
-  if (emptyTextEl) emptyTextEl.textContent = ua ? 'Введи тікер і отримай AI-аналіз' : 'Enter a ticker for AI analysis';
   document.getElementById('r-disclaimer').textContent = ua ? 'Не є фінансовою порадою.' : 'Not financial advice.';
   document.getElementById('lbl-sector').textContent = ua ? 'Сектор' : 'Sector';
   document.getElementById('lbl-risk').textContent = ua ? 'Ризик' : 'Risk';
@@ -1119,7 +1115,6 @@ function renderHistory() {
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 
-function timeAgoAlerts(ts) { return timeAgo(ts, true); }
 
 function toast(msg) {
   var t = document.createElement('div');

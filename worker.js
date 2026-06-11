@@ -482,7 +482,7 @@ const SKIP_WORDS = new Set([
   'SAID','BEEN','ALSO','SOME','INTO','THAN','THEN','EACH','TIME','LIKE','JUST',
   'KNOW','TAKE','YEAR','YOUR','GOOD','MUCH','VERY','WELL','SUCH','EVEN','MOST',
   'USED','MAKE','WANT','LOOK','MORE','GO','IT','OF','IF','US','WE','UP','NO','SO',
-  'HE','SHE','ME','MY','WHO','HOW','WHY','ITS','HIM',
+  'HE','SHE','ME','MY','WHO','HOW','WHY','ITS','HIM','AM','PM','OK',
   // Common chat words that look like tickers
   'INFO','TELL','SHOW','GIVE','HELP','DOES','MEAN','NEED','FIND','BEST','NEXT',
   'SELL','HIGH','DOWN','FALL','RISE','GAIN','LOSS','LOST','LAST','PAST','REAL',
