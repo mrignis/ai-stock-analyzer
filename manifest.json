@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "AI Stock Analyzer",
-  "version": "2.0",
+  "version": "2.1",
   "description": "AI-powered stock & crypto analyzer. Real-time prices, charts, portfolio tracker, alerts. Free, no API keys needed.",
-  "permissions": ["storage", "alarms", "notifications", "tabs", "windows"],
+  "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
     "https://stock-ai-analyzer.chelb-dev.workers.dev/*"
   ],
