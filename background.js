@@ -70,8 +70,8 @@ function checkPrices() {
 
           // Line for the combined toast — every ticker, movers highlighted
           allLines.push(
-            (shouldAlert ? (info.pct > 0 ? '📈' : '📉') : '▫') + ' ' + ticker + ' ' +
-            (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% · $' + info.price.toFixed(2)
+            (shouldAlert ? (info.pct > 0 ? '📈' : '📉') : '➖') + ' ' + ticker + ' ' +
+            (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% • $' + info.price.toFixed(2)
           );
         }
 
@@ -85,7 +85,8 @@ function checkPrices() {
           // old ones cleared, and the toast is force-closed after 7s because
           // Windows otherwise keeps it on screen too long.
           if (alertsToFire.length > 0) {
-            var title = '📊 AI Stocks — алерти (' + alertsToFire.length + ')';
+            // "рухи: 2 з 3" — movers vs. full watchlist, so counts always match the lines
+            var title = '📊 AI Stocks — рухи: ' + alertsToFire.length + ' з ' + allLines.length;
             // Full watchlist in one toast (user request): movers with 📈/📉, rest with ▫.
             // No auto-dismiss — the user closes it himself.
             var message = allLines.slice(0, 6).join('\n');
