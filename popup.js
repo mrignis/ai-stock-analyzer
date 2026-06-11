@@ -98,9 +98,8 @@ document.addEventListener('DOMContentLoaded', function() {
     applyLang();
     loadFxRate(function() {
       fetchMarketData();
-      // Popup open = fresh prices: drop the price cache so the home
-      // watchlist fetches live numbers right away (user request)
-      freshPrices(watchlist.map(function(w) { return w.ticker; }), renderHomeWatchlist);
+      // SWR: cached numbers paint instantly, live fetch replaces them silently
+      renderHomeWatchlist();
     });
 
     document.getElementById('nav-logo').addEventListener('click', function() {
@@ -355,20 +354,21 @@ function showPanel(id) {
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
   document.getElementById('panel-' + id).classList.add('active');
   document.getElementById('tab-' + id).classList.add('active');
-  // Switching panels always shows FRESH prices (user request: no stale
-  // numbers when hopping between home and watchlist)
+  // Panels show cached prices instantly and refresh live (SWR). Portfolio
+  // keeps explicit cache clearing — its P&L math can't take double callbacks.
   var wlTickers = watchlist.map(function(w) { return w.ticker; });
   if (id === 'search') {
-    freshPrices(wlTickers, renderHomeWatchlist);
+    renderHomeWatchlist();
     fetchMarketData();
   }
   if (id === 'watchlist') {
-    var pfTickers = portfolio.map(function(p) { return p.ticker; });
-    freshPrices(wlTickers.concat(pfTickers), function() {
-      var pfVisible = document.getElementById('portfolio-panel').style.display !== 'none';
-      if (pfVisible) renderPortfolio();
-      else renderWatchlist();
-    });
+    var pfVisible = document.getElementById('portfolio-panel').style.display !== 'none';
+    if (pfVisible) {
+      var pfTickers = portfolio.map(function(p) { return p.ticker; });
+      freshPrices(pfTickers, renderPortfolio);
+    } else {
+      renderWatchlist();
+    }
   }
   if (id === 'history') renderHistory();
   if (id === 'news') initNews();
@@ -469,7 +469,7 @@ function renderHomeWatchlist() {
 
   // Fetch live prices (with cache)
   shown.forEach(function(w) {
-    loadLivePrice(w.ticker, function(d) {
+    loadLivePriceSWR(w.ticker, function(d) {
       applyPriceToElements(d, 'hwp-' + w.ticker, 'hwpc-' + w.ticker);
     });
   });
@@ -637,6 +637,23 @@ function loadLivePrice(ticker, cb) {
         cb(d);
       })
       .catch(function() { cb(null); });
+  });
+}
+
+// Stale-while-revalidate flavour: cb fires instantly with the cached price
+// (even expired — no blank rows), then again with the fresh one.
+// Safe only for idempotent UI updates (NOT for P&L accumulation).
+function loadLivePriceSWR(ticker, cb) {
+  chrome.storage.local.get('c_price_' + ticker, function(s) {
+    var e = s['c_price_' + ticker];
+    if (e && e.d) cb(e.d);
+    fetch(WORKER_URL + '/price?ticker=' + ticker)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.c && d.c > 0) { cacheSet('price_' + ticker, d); cb(d); }
+        else if (!e) cb(null);
+      })
+      .catch(function() { if (!e) cb(null); });
   });
 }
 
@@ -1055,7 +1072,7 @@ function renderWatchlist() {
 
   // Fetch live prices (with cache)
   watchlist.forEach(function(w) {
-    loadLivePrice(w.ticker, function(d) {
+    loadLivePriceSWR(w.ticker, function(d) {
       applyPriceToElements(d, 'wp-' + w.ticker, 'wpc-' + w.ticker);
     });
   });

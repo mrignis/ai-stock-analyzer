@@ -493,9 +493,12 @@ async function handleChat(request, env) {
   let liveData = '';
   let companyInfo = '';
   if (potentialTickers.length > 0) {
-    const results = await Promise.all(
-      potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) }))
-    );
+    // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
+    // deep info goes for the first detected ticker
+    const [results, info] = await Promise.all([
+      Promise.all(potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) }))),
+      fetchCompanyInfo(env, potentialTickers[0]),
+    ]);
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
       .map(r => {
@@ -503,10 +506,7 @@ async function handleChat(request, env) {
         return `${r.ticker}: $${r.d.c} (${Number(pct) > 0 ? '+' : ''}${pct}% today)`;
       });
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
-
-    // Deep info (profile + news + Wikipedia) for the first ticker with a real quote
-    const primary = results.find(r => r.d && r.d.c > 0);
-    if (primary) companyInfo = await fetchCompanyInfo(env, primary.ticker);
+    companyInfo = info;
   }
 
   const system = [
