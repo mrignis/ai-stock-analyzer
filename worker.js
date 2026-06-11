@@ -141,6 +141,60 @@ function pctChange(c, pc) {
   return pc > 0 ? ((c - pc) / pc * 100) : 0;
 }
 
+// Deep company info for chat: profile + recent news + Wikipedia background.
+// Returns a compact string for the system prompt ('' when nothing found).
+async function fetchCompanyInfo(env, t) {
+  if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
+
+  const [profile, news] = await Promise.all([
+    fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`)
+      .then(r => r.json()).catch(() => null),
+    fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${getDateDaysAgo(7)}&to=${getToday()}&token=${env.FINNHUB_KEY}`)
+      .then(r => r.json()).catch(() => []),
+  ]);
+
+  const parts = [];
+  if (profile && profile.name) {
+    parts.push(
+      `${t} company profile: ${profile.name}, country of registration=${profile.country || 'N/A'}, ` +
+      `industry=${profile.finnhubIndustry || 'N/A'}, ` +
+      `market cap=${profile.marketCapitalization ? '$' + (profile.marketCapitalization / 1000).toFixed(1) + 'B' : 'N/A'}, ` +
+      `IPO=${profile.ipo || 'N/A'}, website=${profile.weburl || 'N/A'}.`
+    );
+    // Wikipedia intro — covers history and what the company is known for.
+    // Try the full profile name first ("Apple Inc"), fall back to the stripped one.
+    try {
+      const stripped = profile.name.replace(/[,.]?\s+(Inc|Corp|Corporation|Ltd|PLC|Co|Class [A-C])\.?$/i, '').trim();
+      for (const title of [...new Set([profile.name, stripped])]) {
+        const w = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+          { headers: { 'User-Agent': 'stock-ai-analyzer/1.0' } }
+        );
+        if (!w.ok) continue;
+        const wd = await w.json();
+        if (wd.extract && wd.type !== 'disambiguation') {
+          parts.push(`Wikipedia background on ${title}: ${wd.extract.slice(0, 700)}`);
+          break;
+        }
+      }
+    } catch { /* Wikipedia is optional — skip on any error */ }
+  }
+  if (Array.isArray(news) && news.length > 0) {
+    parts.push(
+      `Recent ${t} news headlines (last 7 days): ` +
+      news.slice(0, 5).map(n => n.headline).filter(Boolean).join(' | ')
+    );
+  }
+  return parts.join(' ');
+}
+
+// Well-known company names → tickers, so "чому Microsoft падає" works without a ticker
+const NAME_TO_TICKER = {
+  'MICROSOFT': 'MSFT', 'APPLE': 'AAPL', 'TESLA': 'TSLA', 'GOOGLE': 'GOOGL',
+  'AMAZON': 'AMZN', 'NVIDIA': 'NVDA', 'META': 'META', 'FACEBOOK': 'META',
+  'NETFLIX': 'NFLX', 'INTEL': 'INTC', 'AMD': 'AMD', 'DISNEY': 'DIS',
+};
+
 // ── Yahoo Finance price helper (fallback) ─────────────────────────────────────
 async function yahooQuote(symbol) {
   // Crypto needs -USD suffix (BTC → BTC-USD), stocks stay as-is (SPY, TSLA)
@@ -398,10 +452,18 @@ async function handleChat(request, env) {
 
   // Detect tickers and fetch live prices
   const lastMsg = safeMessages[safeMessages.length - 1]?.content || '';
-  const rawTokens = lastMsg.toUpperCase().match(/\b[A-Z]{2,5}\b/g) || [];
-  const potentialTickers = [...new Set(rawTokens.filter(t => !SKIP_WORDS.has(t)))].slice(0, 3);
+  const upperMsg = lastMsg.toUpperCase();
+  const rawTokens = upperMsg.match(/\b[A-Z]{2,5}\b/g) || [];
+  // Also catch well-known company names written in any case ("Microsoft", "тесла" won't match — Latin only)
+  const namedTickers = Object.keys(NAME_TO_TICKER)
+    .filter(name => upperMsg.includes(name))
+    .map(name => NAME_TO_TICKER[name]);
+  const potentialTickers = [...new Set(
+    rawTokens.filter(t => !SKIP_WORDS.has(t)).concat(namedTickers)
+  )].slice(0, 3);
 
   let liveData = '';
+  let companyInfo = '';
   if (potentialTickers.length > 0) {
     const results = await Promise.all(
       potentialTickers.map(async t => ({ ticker: t, d: await finnhubQuote(env, t) }))
@@ -413,6 +475,10 @@ async function handleChat(request, env) {
         return `${r.ticker}: $${r.d.c} (${Number(pct) > 0 ? '+' : ''}${pct}% today)`;
       });
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
+
+    // Deep info (profile + news + Wikipedia) for the first ticker with a real quote
+    const primary = results.find(r => r.d && r.d.c > 0);
+    if (primary) companyInfo = await fetchCompanyInfo(env, primary.ticker);
   }
 
   const system = [
@@ -422,6 +488,8 @@ async function handleChat(request, env) {
     'Never contradict live data with training knowledge. NEVER give specific prices, percentages, or market cap figures from your training data — those are outdated and wrong. Only state prices that appear in the live data or context provided. If you do not have live data for a ticker, say you do not have current price info rather than guessing.',
     context ? `Current stock analysis context (treat as ground truth): ${context}` : '',
     liveData,
+    companyInfo,
+    companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For stable historical facts (founders, founding year, headquarters) you may also use your general knowledge when confident. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
     'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks, no bullet symbols. Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
