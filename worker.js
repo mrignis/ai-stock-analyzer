@@ -453,7 +453,7 @@ const SKIP_WORDS = new Set([
 ]);
 
 async function handleChat(request, env) {
-  const { messages, context, lang } = await request.json();
+  const { messages, context, lang, currency: userCurrency, fxRate: userFxRate } = await request.json();
   if (!messages || !messages.length) return json({ error: 'No messages' }, 400);
 
   // Server-side limit — client enforces 40 but direct POST calls bypass it
@@ -502,6 +502,10 @@ async function handleChat(request, env) {
     liveData,
     companyInfo,
     companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For stable historical facts (founders, founding year, headquarters) you may also use your general knowledge when confident. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
+    'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
+    (userCurrency && userCurrency !== 'USD' && userFxRate > 0)
+      ? `The user's display currency is ${userCurrency} (1 USD = ${userFxRate} ${userCurrency}). When stating prices, give USD first and add the approximate ${userCurrency} value in parentheses.`
+      : '',
     ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
     'Be concise, factual, and helpful. Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');

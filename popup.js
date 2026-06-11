@@ -1263,7 +1263,7 @@ function sendChat() {
   fetch(WORKER_URL + '/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory, context: chatContext, lang: lang }),
+    body: JSON.stringify({ messages: chatHistory, context: chatContext, lang: lang, currency: currency, fxRate: fxRate }),
   })
     .then(function(r) { return r.json(); })
     .then(function(data) {
