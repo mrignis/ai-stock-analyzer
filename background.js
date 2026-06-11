@@ -3,7 +3,8 @@
 // Same URL as in popup.js
 var WORKER_URL = 'https://stock-ai-analyzer.chelb-dev.workers.dev';
 
-var CHECK_INTERVAL = 15;
+var CHECK_INTERVAL = 15;  // watchlist %-alerts: relaxed cadence (daily % won't run away)
+var TARGET_INTERVAL = 1;  // price targets: traders need the alert NOW, not in 15 min
 
 chrome.runtime.onInstalled.addListener(function() { setupAlarm(); });
 chrome.runtime.onStartup.addListener(function() { setupAlarm(); });
@@ -12,11 +13,21 @@ function setupAlarm() {
   chrome.alarms.clear('priceCheck', function() {
     chrome.alarms.create('priceCheck', { periodInMinutes: CHECK_INTERVAL });
   });
+  chrome.alarms.clear('targetCheck', function() {
+    chrome.alarms.create('targetCheck', { periodInMinutes: TARGET_INTERVAL });
+  });
 }
 
 chrome.alarms.onAlarm.addListener(function(alarm) {
   if (alarm.name === 'priceCheck') checkPrices();
+  if (alarm.name === 'targetCheck') runTargetCheck();
 });
+
+function runTargetCheck() {
+  chrome.storage.local.get(['priceTargets'], function(s) {
+    checkPriceTargets(s.priceTargets || []);
+  });
+}
 
 function fetchPrice(ticker, cb) {
   fetch(WORKER_URL + '/price?ticker=' + ticker)
@@ -34,7 +45,6 @@ function checkPrices() {
     var watchlist = s.watchlist || [];
     var savedPrices = s.priceAlerts || {};
     var threshold = s.alertThreshold || 3;
-    checkPriceTargets(s.priceTargets || []);
     if (!watchlist.length) return;
 
     var pending = watchlist.length;
@@ -170,6 +180,6 @@ chrome.notifications.onClicked.addListener(function(notifId) {
 });
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
-  if (msg.action === 'checkNow') { checkPrices(); sendResponse({ ok: true }); }
+  if (msg.action === 'checkNow') { checkPrices(); runTargetCheck(); sendResponse({ ok: true }); }
   return true;
 });
