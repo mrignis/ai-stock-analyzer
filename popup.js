@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
       applyLang();
       renderWatchlist();
       renderHistory();
+      initAlerts(); // re-render price targets + last prices in the new language
       if (currentTicker) runAnalysis();
     });
 
