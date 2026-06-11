@@ -501,9 +501,11 @@ async function handleChat(request, env) {
 
   const ua = lang === 'ua';
 
-  // Detect tickers and fetch live prices
+  // Detect tickers and fetch live prices — scan the last few messages so
+  // follow-ups like "what about now?" keep the ticker from the conversation
   const lastMsg = safeMessages[safeMessages.length - 1]?.content || '';
-  const upperMsg = lastMsg.toUpperCase();
+  const recentText = safeMessages.slice(-4).map(m => m.content || '').join(' ');
+  const upperMsg = recentText.toUpperCase();
   const rawTokens = upperMsg.match(/\b[A-Z]{2,5}\b/g) || [];
   // Also catch well-known company/crypto names ("Microsoft" → MSFT, "BITCOIN" → BTC).
   // Word boundaries so "METAL" doesn't trigger META, "PINEAPPLE" doesn't trigger APPLE.
