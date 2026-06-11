@@ -527,10 +527,20 @@ function runAnalysis() {
     fetchFreshPrice(raw, null);
 
     var signal = currentAbort.signal;
-    // Auto-abort after 45s so the loading spinner never hangs forever
+    // Auto-abort after 65s: at peak hours Groq free tier queues requests
+    // (measured 58s on QQQ) — better to wait than to drop a near-ready result
     var timeoutId = setTimeout(function() {
       if (currentAbort) { currentAbort.abort(); currentAbort = null; }
-    }, 45000);
+    }, 65000);
+    // Tell the user it's the AI queue, not a hang
+    setTimeout(function() {
+      var msgEl = document.getElementById('loading-msg');
+      if (msgEl && document.getElementById('loading-state').style.display !== 'none') {
+        msgEl.textContent = lang === 'ua'
+          ? 'AI перевантажений, ще секунд 20-30...'
+          : 'AI is busy, ~20-30 more seconds...';
+      }
+    }, 15000);
     fetch(WORKER_URL + '/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
