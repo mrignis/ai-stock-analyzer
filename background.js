@@ -88,7 +88,7 @@ function checkPrices() {
                 iconUrl: 'icons/icon128.png',
                 title: '📊 AI Stocks — ' + a.ticker,
                 message: a.reason,
-                priority: 2,
+                priority: 1, // 2 pins the toast until manually closed — too intrusive
               }, function() {
                 if (chrome.runtime.lastError) {
                   console.error('Notification failed:', chrome.runtime.lastError.message);
