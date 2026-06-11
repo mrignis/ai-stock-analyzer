@@ -30,10 +30,21 @@ const CRYPTO_NAMES = {
   'TRON': 'TRX',
 };
 
+const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but never queued
+
 async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
-  // 25s timeout — Cloudflare Worker free tier limit is 30s wall-clock
+  // Primary engine (70B, 20s) → on timeout/overload retry with the fast
+  // fallback (8B-instant, 12s). User always gets an answer at peak hours.
+  try {
+    return await groqRequest(env, GROQ_MODEL, messages, temperature, maxTokens, 20000);
+  } catch (e) {
+    return await groqRequest(env, GROQ_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
+  }
+}
+
+async function groqRequest(env, model, messages, temperature, maxTokens, timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let res;
   try {
@@ -44,7 +55,7 @@ async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
         'Authorization': 'Bearer ' + env.GROQ_KEY,
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model,
         messages,
         temperature,
         max_tokens: maxTokens,
