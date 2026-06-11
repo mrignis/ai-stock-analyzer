@@ -549,6 +549,7 @@ async function handleChat(request, env) {
     ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
     'STYLE RULES: Be dense and specific. Every sentence must contain a concrete fact (number, date, event, name) or a direct answer. FORBIDDEN: filler and obvious generalities like "prices can change over time", "one of the largest companies in the world", "many factors influence the price", "it is worth noting". Never repeat the same idea twice. Default length 3-6 short sentences; go longer only if the user asks for detail.',
     'News headlines may mention several companies — attribute each fact to the correct company, never mix them up.',
+    'Treat a word as a stock ticker ONLY if live data for it is provided above, or the user wrote it in CAPITALS (TSLA, NOW). Lowercase common words ("now", "all", "key", "open") are ordinary English words — never reinterpret them as tickers.',
     'Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
