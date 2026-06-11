@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s.conversations) conversations = s.conversations;
     if (s.currentConvId) currentConvId = s.currentConvId;
     if (s.portfolio) portfolio = s.portfolio;
-    mergePortfolioDuplicates();
+    migratePortfolioToLots();
     if (s.currency && CURRENCY_META[s.currency]) currency = s.currency;
     document.getElementById('currency-select').value = currency;
     applyTheme();
@@ -1365,29 +1365,30 @@ function appendChatMsg(role, content, isTyping) {
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 function savePortfolio() { save({ portfolio: portfolio }); }
 
-// One-time cleanup: merge duplicate tickers added before the merge feature
-// existed (weighted-average buy price). Runs on startup.
-function mergePortfolioDuplicates() {
+// Wealthsimple-style model: one position per ticker, individual buys kept
+// as "lots" inside it. Migrates old flat records on startup.
+function migratePortfolioToLots() {
   var byTicker = {};
-  var merged = [];
-  var hadDuplicates = false;
+  var migrated = [];
+  var changed = false;
   portfolio.forEach(function(p) {
+    var lots = p.lots || [{ shares: p.shares, buyPrice: p.buyPrice, addedAt: p.addedAt || Date.now() }];
+    if (!p.lots) changed = true;
     var ex = byTicker[p.ticker];
     if (ex) {
-      var total = ex.shares + p.shares;
-      ex.buyPrice = (ex.shares * ex.buyPrice + p.shares * p.buyPrice) / total;
-      ex.shares = total;
-      hadDuplicates = true;
+      ex.lots = ex.lots.concat(lots);
+      changed = true;
     } else {
-      byTicker[p.ticker] = p;
-      merged.push(p);
+      var pos = { ticker: p.ticker, lots: lots };
+      byTicker[p.ticker] = pos;
+      migrated.push(pos);
     }
   });
-  if (hadDuplicates) {
-    portfolio = merged;
-    savePortfolio();
-  }
+  if (changed) { portfolio = migrated; savePortfolio(); }
 }
+
+function posShares(p)   { return p.lots.reduce(function(s, l) { return s + l.shares; }, 0); }
+function posInvested(p) { return p.lots.reduce(function(s, l) { return s + l.shares * l.buyPrice; }, 0); }
 
 function addPortfolioPosition() {
   var ticker   = document.getElementById('pf-ticker').value.trim().toUpperCase();
@@ -1397,15 +1398,14 @@ function addPortfolioPosition() {
     toast(lang === 'ua' ? '⚠ Заповни всі поля' : '⚠ Fill all fields');
     return;
   }
-  // Buying more of an existing ticker merges into one position
-  // with a weighted-average buy price (user request)
+  // Wealthsimple-style: a new buy of an existing ticker becomes a lot
+  // inside the same position — summary on top, history preserved
+  var lot = { shares: shares, buyPrice: buyPrice, addedAt: Date.now() };
   var existing = portfolio.find(function(p) { return p.ticker === ticker; });
   if (existing) {
-    var totalShares = existing.shares + shares;
-    existing.buyPrice = (existing.shares * existing.buyPrice + shares * buyPrice) / totalShares;
-    existing.shares = totalShares;
+    existing.lots.push(lot);
   } else {
-    portfolio.push({ ticker: ticker, shares: shares, buyPrice: buyPrice, addedAt: Date.now() });
+    portfolio.push({ ticker: ticker, lots: [lot] });
   }
   savePortfolio();
   document.getElementById('pf-ticker').value = '';
@@ -1422,6 +1422,15 @@ function removePortfolioPosition(idx) {
   renderPortfolio();
 }
 
+function removeLot(posIdx, lotIdx) {
+  var p = portfolio[posIdx];
+  if (!p) return;
+  p.lots.splice(lotIdx, 1);
+  if (p.lots.length === 0) portfolio.splice(posIdx, 1); // last buy removed → position gone
+  savePortfolio();
+  renderPortfolio();
+}
+
 function renderPortfolio() {
   var listEl = document.getElementById('portfolio-list');
   var summEl = document.getElementById('portfolio-summary');
@@ -1434,24 +1443,55 @@ function renderPortfolio() {
     return;
   }
 
-  // Render rows with placeholders, then fetch prices
+  // Render rows with placeholders, then fetch prices.
+  // Main row = position summary; click expands the purchase history (lots).
   var html = '';
   portfolio.forEach(function(p, i) {
-    html += '<div class="pf-row" id="pf-row-' + i + '">' +
+    var shares = posShares(p);
+    var avg = shares > 0 ? posInvested(p) / shares : 0;
+    var hint = p.lots.length > 1 ? ' ▸ ' + p.lots.length + (lang === 'ua' ? ' покупки' : ' buys') : '';
+    html += '<div class="pf-row" id="pf-row-' + i + '" data-idx="' + i + '" style="cursor:pointer">' +
       '<span class="pf-ticker">' + p.ticker + '</span>' +
       '<div class="pf-info">' +
-        '<div class="pf-shares">' + p.shares + ' ' + (lang === 'ua' ? 'акцій' : 'shares') + ' · ' + fmtMoney(p.buyPrice) + '</div>' +
+        '<div class="pf-shares">' + shares + ' ' + (lang === 'ua' ? 'акцій' : 'shares') + ' · ' + fmtMoney(avg) + hint + '</div>' +
         '<div class="pf-prices" id="pf-price-' + i + '" style="color:var(--dim)">—</div>' +
       '</div>' +
       '<div class="pf-pl" id="pf-pl-' + i + '" style="color:var(--dim)">—</div>' +
       '<button class="pf-remove" data-idx="' + i + '">✕</button>' +
     '</div>';
+    // Hidden lot history under the row (Wealthsimple "Activity" style)
+    html += '<div class="pf-lots" id="pf-lots-' + i + '" style="display:none;padding:2px 12px 8px 24px">';
+    p.lots.forEach(function(l, j) {
+      var date = new Date(l.addedAt).toLocaleDateString(lang === 'ua' ? 'uk-UA' : 'en-US');
+      html += '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim);padding:3px 0">' +
+        '<span style="width:70px">' + date + '</span>' +
+        '<span style="color:var(--text)">' + l.shares + ' × ' + fmtMoney(l.buyPrice) + '</span>' +
+        '<span style="margin-left:auto">' + fmtMoney(l.shares * l.buyPrice) + '</span>' +
+        '<button class="pf-lot-remove" data-pos="' + i + '" data-lot="' + j + '" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button>' +
+      '</div>';
+    });
+    html += '</div>';
   });
   listEl.innerHTML = html;
 
   listEl.querySelectorAll('.pf-remove').forEach(function(btn) {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
       removePortfolioPosition(parseInt(this.getAttribute('data-idx')));
+    });
+  });
+  // Click on a position toggles its purchase history
+  listEl.querySelectorAll('.pf-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var lotsEl = document.getElementById('pf-lots-' + this.getAttribute('data-idx'));
+      if (lotsEl) lotsEl.style.display = lotsEl.style.display === 'none' ? 'block' : 'none';
+    });
+  });
+  // Removing a single lot (one purchase)
+  listEl.querySelectorAll('.pf-lot-remove').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      removeLot(parseInt(this.getAttribute('data-pos')), parseInt(this.getAttribute('data-lot')));
     });
   });
 
@@ -1466,8 +1506,8 @@ function renderPortfolio() {
     loadLivePrice(p.ticker, function(d) {
       if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
       var curPrice = d.c;
-      var invested = p.shares * p.buyPrice;
-      var current  = p.shares * curPrice;
+      var invested = posInvested(p);
+      var current  = posShares(p) * curPrice;
       totalInvested += invested;
       var pl    = current - invested;
       var plPct = invested > 0 ? (pl / invested * 100) : 0;
