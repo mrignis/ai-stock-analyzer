@@ -114,6 +114,33 @@ export default {
   },
 };
 
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+// Parses ?ticker= from URL, normalizes crypto names. Returns null if missing.
+function parseTicker(request) {
+  const raw = (new URL(request.url).searchParams.get('ticker') || '').toUpperCase();
+  if (!raw) return null;
+  const t = CRYPTO_NAMES[raw] || raw;
+  return { t, isCrypto: !!CRYPTO_MAP[t] };
+}
+
+// Fetches a Finnhub quote, returns parsed JSON or null on network error
+async function finnhubQuote(env, sym) {
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
+    );
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// Percent change between current and previous close (0 when pc is invalid)
+function pctChange(c, pc) {
+  return pc > 0 ? ((c - pc) / pc * 100) : 0;
+}
+
 // ── Yahoo Finance price helper (fallback) ─────────────────────────────────────
 async function yahooQuote(symbol) {
   // Crypto needs -USD suffix (BTC → BTC-USD), stocks stay as-is (SPY, TSLA)
@@ -146,27 +173,20 @@ async function handleMarket(env) {
     { key: 'GOLD',  sym: 'GLD',             label: 'Gold'    },
   ];
 
-  const results = await Promise.allSettled(
-    symbols.map(s =>
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(s.sym)}&token=${env.FINNHUB_KEY}`)
-        .then(r => r.json())
-        .then(d => ({ ...s, c: d.c, pc: d.pc }))
-    )
+  const results = await Promise.all(
+    symbols.map(async s => ({ ...s, q: await finnhubQuote(env, s.sym) }))
   );
 
   const data = {};
   // Collect which keys need Yahoo fallback
   const needFallback = [];
 
-  results.forEach((r, i) => {
-    const s = symbols[i];
-    if (r.status === 'fulfilled' && r.value.c > 0) {
-      const { key, label, c, pc } = r.value;
-      const pct = pc > 0 ? ((c - pc) / pc * 100) : 0;
-      data[key] = { label, c, pc, pct };
+  results.forEach(r => {
+    if (r.q && r.q.c > 0) {
+      data[r.key] = { label: r.label, c: r.q.c, pc: r.q.pc, pct: pctChange(r.q.c, r.q.pc) };
     } else {
       // Finnhub failed or returned 0 — try Yahoo
-      needFallback.push(s);
+      needFallback.push(r);
     }
   });
 
@@ -175,10 +195,7 @@ async function handleMarket(env) {
     await Promise.allSettled(
       needFallback.map(async s => {
         const q = await yahooQuote(YAHOO_MARKET_SYM[s.key]);
-        if (q) {
-          const pct = q.pc > 0 ? ((q.c - q.pc) / q.pc * 100) : 0;
-          data[s.key] = { label: s.label, c: q.c, pc: q.pc, pct };
-        }
+        if (q) data[s.key] = { label: s.label, c: q.c, pc: q.pc, pct: pctChange(q.c, q.pc) };
       })
     );
   }
@@ -188,31 +205,17 @@ async function handleMarket(env) {
 
 // ── /price?ticker=TSLA ────────────────────────────────────────────────────────
 async function handlePrice(request, env) {
-  const url    = new URL(request.url);
-  const raw    = (url.searchParams.get('ticker') || '').toUpperCase();
-  if (!raw) return json({ error: 'Missing ticker' }, 400);
-  const ticker = CRYPTO_NAMES[raw] || raw;
-  const sym    = CRYPTO_MAP[ticker] || ticker;
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
 
-  // Try Finnhub first — wrap in try/catch so a network error doesn't skip Yahoo
-  let finnhubData = null;
-  try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${env.FINNHUB_KEY}`
-    );
-    finnhubData = await res.json();
-  } catch {
-    // Finnhub network/parse error — proceed to Yahoo fallback
-  }
-
-  // If Finnhub returns valid price — use it
+  // Try Finnhub first; if it returns a valid price — use it
+  const finnhubData = await finnhubQuote(env, CRYPTO_MAP[t] || t);
   if (finnhubData && finnhubData.c && finnhubData.c > 0) return json(finnhubData);
 
   // Finnhub failed or returned zero — fallback to Yahoo Finance
-  const isCrypto  = !!CRYPTO_MAP[ticker];
-  const yahooSym  = isCrypto ? ticker + '-USD' : ticker;
-  const yahooData = await yahooQuote(yahooSym);
-  if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: yahooData.pc > 0 ? ((yahooData.c - yahooData.pc) / yahooData.pc * 100) : 0 });
+  const yahooData = await yahooQuote(isCrypto ? t + '-USD' : t);
+  if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: pctChange(yahooData.c, yahooData.pc) });
 
   return json(finnhubData || {}); // return whatever Finnhub gave (may be empty)
 }
@@ -304,12 +307,9 @@ Return ONLY this JSON structure:
 
 // ── /news?ticker=TSLA ────────────────────────────────────────────────────────
 async function handleNews(request, env) {
-  const url = new URL(request.url);
-  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
-  if (!raw) return json({ error: 'Missing ticker' }, 400);
-
-  const t = CRYPTO_NAMES[raw] || raw;
-  const isCrypto = !!CRYPTO_MAP[t];
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
   if (isCrypto) return json([]); // Finnhub free tier has no crypto news
 
   const today = getToday();
@@ -337,12 +337,9 @@ async function handleNews(request, env) {
 
 // ── /candle?ticker=TSLA ───────────────────────────────────────────────────────
 async function handleCandle(request, env) {
-  const url = new URL(request.url);
-  const raw = (url.searchParams.get('ticker') || '').toUpperCase();
-  if (!raw) return json({ error: 'Missing ticker' }, 400);
-
-  const t        = CRYPTO_NAMES[raw] || raw;
-  const isCrypto = !!CRYPTO_MAP[t];
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
   // Yahoo Finance: stocks use ticker as-is (TSLA), crypto adds -USD (BTC-USD)
   const yahooSym = isCrypto ? t + '-USD' : t;
 
@@ -401,19 +398,14 @@ async function handleChat(request, env) {
 
   let liveData = '';
   if (potentialTickers.length > 0) {
-    const results = await Promise.allSettled(
-      potentialTickers.map(t =>
-        fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${env.FINNHUB_KEY}`)
-          .then(r => r.json())
-          .then(d => ({ ticker: t, d }))
-      )
+    const results = await Promise.all(
+      potentialTickers.map(async t => ({ ticker: t, d: await finnhubQuote(env, t) }))
     );
     const quotes = results
-      .filter(r => r.status === 'fulfilled' && r.value.d.c > 0)
+      .filter(r => r.d && r.d.c > 0)
       .map(r => {
-        const { ticker, d } = r.value;
-        const pct = (d.pc > 0 ? ((d.c - d.pc) / d.pc * 100) : 0).toFixed(2);
-        return `${ticker}: $${d.c} (${Number(pct) > 0 ? '+' : ''}${pct}% today)`;
+        const pct = pctChange(r.d.c, r.d.pc).toFixed(2);
+        return `${r.ticker}: $${r.d.c} (${Number(pct) > 0 ? '+' : ''}${pct}% today)`;
       });
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
   }
