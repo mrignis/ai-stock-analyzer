@@ -256,9 +256,12 @@ function applyTheme() {
 // ── Lang ──────────────────────────────────────────────────────────────────────
 function applyLang() {
   var ua = lang === 'ua';
-  document.getElementById('lang-btn').textContent = ua ? 'EN' : 'UA';
+  // Shows the CURRENT language (cousin's UX feedback) — click switches
+  document.getElementById('lang-btn').textContent = ua ? 'UA' : 'EN';
+  // Full words instead of WL/Hist. — accessibility feedback
   document.getElementById('tab-search').textContent = ua ? 'Пошук' : 'Search';
-  document.getElementById('tab-history').textContent = ua ? 'Іст.' : 'Hist.';
+  document.getElementById('tab-watchlist').textContent = ua ? 'Список' : 'Watchlist';
+  document.getElementById('tab-history').textContent = ua ? 'Історія' : 'History';
   document.getElementById('analyze-btn').textContent = ua ? 'Аналіз' : 'Analyze';
   document.getElementById('lbl-popular').textContent = ua ? 'Популярні:' : 'Popular:';
   document.getElementById('lbl-market').textContent = ua ? 'Ринок' : 'Market';

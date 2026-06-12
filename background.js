@@ -24,8 +24,8 @@ chrome.alarms.onAlarm.addListener(function(alarm) {
 });
 
 function runTargetCheck() {
-  chrome.storage.local.get(['priceTargets'], function(s) {
-    checkPriceTargets(s.priceTargets || []);
+  chrome.storage.local.get(['priceTargets', 'lang'], function(s) {
+    checkPriceTargets(s.priceTargets || [], (s.lang || 'ua') === 'ua');
   });
 }
 
@@ -41,10 +41,12 @@ function fetchPrice(ticker, cb) {
 }
 
 function checkPrices() {
-  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold', 'priceTargets'], function(s) {
+  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold', 'priceTargets', 'lang'], function(s) {
     var watchlist = s.watchlist || [];
     var savedPrices = s.priceAlerts || {};
     var threshold = s.alertThreshold || 3;
+    // Notifications follow the UI language (cousin's bug report)
+    var ua = (s.lang || 'ua') === 'ua';
     if (!watchlist.length) return;
 
     var pending = watchlist.length;
@@ -65,7 +67,8 @@ function checkPrices() {
           if (Math.abs(info.pct) >= threshold) {
             shouldAlert = true;
             reason = (info.pct > 0 ? '📈' : '📉') + ' ' + ticker + ' ' +
-              (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) + '% за день. $' + info.price.toFixed(2);
+              (info.pct > 0 ? '+' : '') + info.pct.toFixed(1) +
+              (ua ? '% за день. $' : '% today. $') + info.price.toFixed(2);
           }
 
           if (lastPrice && !shouldAlert) {
@@ -73,7 +76,8 @@ function checkPrices() {
             if (Math.abs(ch) >= threshold) {
               shouldAlert = true;
               reason = (ch > 0 ? '📈' : '📉') + ' ' + ticker + ' ' +
-                (ch > 0 ? '+' : '') + ch.toFixed(1) + '% з останньої перевірки. $' + info.price.toFixed(2);
+                (ch > 0 ? '+' : '') + ch.toFixed(1) +
+                (ua ? '% з останньої перевірки. $' : '% since last check. $') + info.price.toFixed(2);
             }
           }
 
@@ -97,7 +101,9 @@ function checkPrices() {
           // Windows otherwise keeps it on screen too long.
           if (alertsToFire.length > 0) {
             // "рухи: 2 з 3" — movers vs. full watchlist, so counts always match the lines
-            var title = '📊 AI Stocks — рухи: ' + alertsToFire.length + ' з ' + allLines.length;
+            var title = ua
+              ? '📊 AI Stocks — рухи: ' + alertsToFire.length + ' з ' + allLines.length
+              : '📊 AI Stocks — moves: ' + alertsToFire.length + ' of ' + allLines.length;
             // Full watchlist in one toast (user request): movers with 📈/📉, rest with ▫.
             // No auto-dismiss — the user closes it himself.
             var message = allLines.slice(0, 6).join('\n');
@@ -125,7 +131,7 @@ function checkPrices() {
 }
 
 // Price targets: "tell me when TSLA falls below $300" — one-shot alerts
-function checkPriceTargets(targets) {
+function checkPriceTargets(targets, ua) {
   if (!targets.length) return;
   // De-duplicated tickers so one fetch covers multiple targets
   var tickers = targets
@@ -150,8 +156,10 @@ function checkPriceTargets(targets) {
         );
         if (hit) {
           hits.push('🎯 ' + t.ticker + ' ' +
-            (t.dir === 'below' ? 'впав нижче' : 'зріс вище') + ' $' + t.price +
-            ' — зараз $' + cur.toFixed(2));
+            (t.dir === 'below'
+              ? (ua ? 'впав нижче' : 'fell below')
+              : (ua ? 'зріс вище' : 'rose above')) + ' $' + t.price +
+            (ua ? ' — зараз $' : ' — now $') + cur.toFixed(2));
         } else {
           remaining.push(t); // not hit (or no price) — keep waiting
         }
@@ -162,7 +170,7 @@ function checkPriceTargets(targets) {
         chrome.notifications.create('target_' + Date.now(), {
           type: 'basic',
           iconUrl: 'icons/icon128.png',
-          title: '🎯 AI Stocks — цінова ціль!',
+          title: ua ? '🎯 AI Stocks — цінова ціль!' : '🎯 AI Stocks — price target hit!',
           message: hits.join('\n'),
           priority: 1,
         }, function() {
