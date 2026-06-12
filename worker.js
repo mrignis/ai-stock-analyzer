@@ -375,10 +375,17 @@ async function handleAnalyze(request, env, _retried) {
   let raw = ticker.toUpperCase().trim();
   // Company NAME in the search box? ("INTEL", "FERRARI", "интел") —
   // resolve via Yahoo's registry so users can find any firm (tester request).
-  // Only when it's clearly not a ticker: >5 chars or no Finnhub quote.
-  if (raw.length > 5 || !/^[A-Z0-9.\-:/]+$/.test(raw)) {
-    const resolved = await resolveTickerByName(raw);
-    if (resolved) raw = resolved.toUpperCase();
+  // One cheap quote probe decides: real ticker -> proceed; otherwise ask the
+  // registry ONCE before the expensive pipeline (no double Groq runs).
+  {
+    const probe = await finnhubQuote(env, CRYPTO_MAP[CRYPTO_NAMES[raw] || raw] || (CRYPTO_NAMES[raw] || raw));
+    if (!probe || !probe.c || probe.c === 0) {
+      const resolved = await resolveTickerByName(raw);
+      // Accept only clean symbols — Yahoo can return futures/odd formats
+      if (resolved && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.toUpperCase())) {
+        raw = resolved.toUpperCase();
+      }
+    }
   }
   // Reject suspiciously long or malformed tickers before they enter the AI prompt
   if (raw.length > 15 || !/^[A-Z0-9.\-:/]+$/.test(raw)) {
@@ -414,15 +421,6 @@ async function handleAnalyze(request, env, _retried) {
   // exist — refuse instead of letting the AI invent a company (test finding).
   // Last chance: maybe it's a company NAME ("INTEL") — ask the registry once.
   if ((!quote.c || quote.c === 0) && !profile.name) {
-    if (!_retried) {
-      const resolved = await resolveTickerByName(t);
-      if (resolved && resolved.toUpperCase() !== t) {
-        return await handleAnalyze(new Request(request.url, {
-          method: 'POST',
-          body: JSON.stringify({ ticker: resolved, lang }),
-        }), env, true);
-      }
-    }
     return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
   }
 
