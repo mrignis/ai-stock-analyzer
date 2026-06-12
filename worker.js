@@ -529,6 +529,8 @@ const SKIP_WORDS = new Set([
   'INFO','TELL','SHOW','GIVE','HELP','DOES','MEAN','NEED','FIND','BEST','NEXT',
   'SELL','HIGH','DOWN','FALL','RISE','GAIN','LOSS','LOST','LAST','PAST','REAL',
   'LIVE','DATA','NEWS','SURE','OKAY','CHAT','LONG','HOLD','NICE','SAFE',
+  // Greetings & chat words that collide with real tickers (HI = Hillenbrand!)
+  'HI','HEY','OK','YES','YEAH','THX','LOL','PLS','BYE','HMM',
   'RISK','RATE','PLAN','OPEN','STOP','KEEP','CASH','IDEA','ONES','BOTH',
   'ABOVE','BELOW','ABOUT','AFTER','AGAIN','PRICE','STOCK','SHARE','TRADE','WORTH',
   'TODAY','SINCE','THINK','FEELS','LOOKS','MAYBE','RIGHT','WRONG','STILL','OTHER',
