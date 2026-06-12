@@ -401,6 +401,12 @@ async function handleAnalyze(request, env) {
   const newsRaw = newsRes.status    === 'fulfilled' ? await newsRes.value.json()    : [];
   const metrics = metricsRes.status === 'fulfilled' ? await metricsRes.value.json() : {};
 
+  // Unknown ticker guard: no price AND no profile = the symbol does not
+  // exist — refuse instead of letting the AI invent a company (test finding)
+  if ((!quote.c || quote.c === 0) && !profile.name) {
+    return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
+  }
+
   const news = Array.isArray(newsRaw)
     ? newsRaw.slice(0, 5).map(n => `- ${n.headline}`).join('\n')
     : '';
