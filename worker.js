@@ -88,6 +88,26 @@ async function groqRequest(env, model, messages, temperature, maxTokens, timeout
   return text;
 }
 
+// ── Rate limiting (abuse protection, cousin's security feedback) ──────────────
+// In-memory per-isolate counter: not perfectly global, but stops bursts and
+// script abuse without paid infrastructure. AI endpoints are the expensive ones.
+const rateBuckets = new Map();
+const RATE_LIMIT = 20;        // max AI requests...
+const RATE_WINDOW = 60000;    // ...per minute per IP
+
+function rateLimited(request) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const now = Date.now();
+  const b = rateBuckets.get(ip);
+  if (!b || now - b.start > RATE_WINDOW) {
+    rateBuckets.set(ip, { start: now, count: 1 });
+    if (rateBuckets.size > 5000) rateBuckets.clear(); // memory guard
+    return false;
+  }
+  b.count++;
+  return b.count > RATE_LIMIT;
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
@@ -95,6 +115,11 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // Expensive AI endpoints are rate-limited per IP
+    if ((url.pathname === '/analyze' || url.pathname === '/chat') && rateLimited(request)) {
+      return json({ error: 'Too many requests — please slow down / забагато запитів, зачекай хвилину' }, 429);
+    }
 
     try {
       if (url.pathname === '/test' && request.method === 'GET') {
