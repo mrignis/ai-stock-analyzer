@@ -565,6 +565,8 @@ const SKIP_WORDS = new Set([
   'LIVE','DATA','NEWS','SURE','OKAY','CHAT','LONG','HOLD','NICE','SAFE',
   // Greetings & chat words that collide with real tickers (HI = Hillenbrand!)
   'HI','HEY','OK','YES','YEAH','THX','LOL','PLS','BYE','HMM',
+  // Generic finance nouns that are also tickers (FIRM, EV, CEO...)
+  'FIRM','EV','CEO','IPO','ETF','USD','EUR','API',
   'RISK','RATE','PLAN','OPEN','STOP','KEEP','CASH','IDEA','ONES','BOTH',
   'ABOVE','BELOW','ABOUT','AFTER','AGAIN','PRICE','STOCK','SHARE','TRADE','WORTH',
   'TODAY','SINCE','THINK','FEELS','LOOKS','MAYBE','RIGHT','WRONG','STILL','OTHER',
@@ -579,28 +581,31 @@ async function handleChat(request, env) {
 
   const ua = lang === 'ua';
 
-  // Detect tickers and fetch live prices — scan the last few messages so
-  // follow-ups like "what about now?" keep the ticker from the conversation
+  // Ticker priority (quality redesign after the "tell me firm info" bug):
+  //   1. explicit tickers in the LAST message
+  //   2. company name via registry (last message only)
+  //   3. tickers from earlier conversation (follow-up safety net)
+  // A non-resolving word ("firm") must never block the conversation context.
+  let candidateNote = '';
   const lastMsg = safeMessages[safeMessages.length - 1]?.content || '';
-  const recentText = safeMessages.slice(-4).map(m => m.content || '').join(' ');
-  const upperMsg = recentText.toUpperCase();
-  const rawTokens = upperMsg.match(/\b[A-Z]{2,5}\b/g) || [];
-  // Also catch well-known company/crypto names ("Microsoft" → MSFT, "BITCOIN" → BTC).
-  // Word boundaries so "METAL" doesn't trigger META, "PINEAPPLE" doesn't trigger APPLE.
-  const namedTickers = [...Object.entries(NAME_TO_TICKER), ...Object.entries(CRYPTO_NAMES)]
-    .filter(([name]) => new RegExp('\\b' + name + '\\b').test(upperMsg))
-    .map(([, t]) => t);
-  const potentialTickers = [...new Set(
-    rawTokens.filter(t => !SKIP_WORDS.has(t)).concat(namedTickers)
-  )].slice(0, 3);
+  const upperLast = lastMsg.toUpperCase();
+  const upperConv = safeMessages.slice(-4, -1).map(m => m.content || '').join(' ').toUpperCase();
 
-  // No explicit ticker? Ask Yahoo's registry by company name from the
-  // current question ("скільки коштує ferrari" → RACE). Guard: only when
-  // the message has a substantial word — "hi" must not resolve to Himax.
-  if (potentialTickers.length === 0) {
-    // Search only the substantial words ("what is the price of ferrari?" →
-    // "FERRARI") — full sentences confuse Yahoo, and "hi" must stay a greeting
-    const substance = upperMsg
+  const tickersIn = (text) => {
+    const raw = text.match(/\b[A-Z]{2,5}\b/g) || [];
+    // Word boundaries so "METAL" doesn't trigger META, "PINEAPPLE" doesn't trigger APPLE
+    const named = [...Object.entries(NAME_TO_TICKER), ...Object.entries(CRYPTO_NAMES)]
+      .filter(([name]) => new RegExp('\\b' + name + '\\b').test(text))
+      .map(([, t]) => t);
+    return raw.filter(t => !SKIP_WORDS.has(t)).concat(named);
+  };
+
+  const lastTickers = tickersIn(upperLast);
+  const convTickers = tickersIn(upperConv);
+
+  // Registry lookup when the last message names no ticker directly
+  if (lastTickers.length === 0) {
+    const substance = upperLast
       .replace(/[^A-ZА-ЯІЇЄҐ0-9 ]/g, ' ')
       .split(/\s+/)
       .filter(w => w.length >= 4 && !SKIP_WORDS.has(w))
@@ -608,24 +613,28 @@ async function handleChat(request, env) {
       .join(' ');
     if (substance) {
       const resolved = await resolveTickerByName(substance);
-      if (resolved && resolved.sym) potentialTickers.push(resolved.sym.toUpperCase());
-      else if (resolved && resolved.candidates) candidateNote =
+      if (resolved && resolved.sym) lastTickers.push(resolved.sym.toUpperCase());
+      else if (resolved && resolved.candidates && convTickers.length === 0) candidateNote =
         'The query did not match a ticker exactly. Possible matches: ' +
         resolved.candidates.join(', ') +
         '. Ask the user which one they meant — do NOT silently pick one.';
     }
   }
 
+  // Conversation tickers are the safety net, never the blocker
+  const potentialTickers = [...new Set(lastTickers.concat(convTickers))].slice(0, 3);
+
   let liveData = '';
   let companyInfo = '';
-  let candidateNote = '';
   if (potentialTickers.length > 0) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
-    const [results, info] = await Promise.all([
-      Promise.all(potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) }))),
-      fetchCompanyInfo(env, potentialTickers[0]),
-    ]);
+    const results = await Promise.all(
+      potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) })));
+    // Deep info follows the first ticker WITH a live price — "firm" (no price)
+    // must not steal it from the Intel being discussed
+    const primary = results.find(r => r.d && r.d.c > 0);
+    const info = primary ? await fetchCompanyInfo(env, primary.ticker) : '';
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
       .map(r => {
@@ -654,7 +663,7 @@ async function handleChat(request, env) {
     'STYLE RULES: Be dense and specific. Every sentence must contain a concrete fact (number, date, event, name) or a direct answer. FORBIDDEN: filler and obvious generalities like "prices can change over time", "one of the largest companies in the world", "many factors influence the price", "it is worth noting". Never repeat the same idea twice. Default length 3-6 short sentences; go longer only if the user asks for detail.',
     'News headlines may mention several companies — attribute each fact to the correct company, never mix them up.',
     'Treat a word as a stock ticker ONLY if live data for it is provided above, or the user wrote it in CAPITALS (TSLA, NOW). Lowercase common words ("now", "all", "key", "open") are ordinary English words — never reinterpret them as tickers.',
-    'Ambiguous follow-ups ("what about now?", "and today?", "а зараз?") always refer to the most recently discussed ticker — answer about THAT ticker with the live data above. For price follow-ups give 2-3 sentences: the price and day change, plus one extra concrete detail from the data above (recent news driver, market cap, or how it compares to the day).',
+    'Generic references — "the firm", "the company", "it", "фірма", "компанія" — and ambiguous follow-ups ("what about now?", "tell me firm info", "а зараз?") always mean the most recently discussed company. NEVER reply "I do not have info" when live data for the discussed ticker is right above — use it. For price follow-ups give 2-3 sentences: the price and day change, plus one extra concrete detail from the data above (recent news driver, market cap, or how it compares to the day).',
     'Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
