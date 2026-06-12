@@ -561,10 +561,21 @@ async function handleChat(request, env) {
   )].slice(0, 3);
 
   // No explicit ticker? Ask Yahoo's registry by company name from the
-  // current question ("скільки коштує ferrari" → RACE)
+  // current question ("скільки коштує ferrari" → RACE). Guard: only when
+  // the message has a substantial word — "hi" must not resolve to Himax.
   if (potentialTickers.length === 0) {
-    const resolved = await resolveTickerByName(lastMsg);
-    if (resolved) potentialTickers.push(resolved.toUpperCase());
+    // Search only the substantial words ("what is the price of ferrari?" →
+    // "FERRARI") — full sentences confuse Yahoo, and "hi" must stay a greeting
+    const substance = upperMsg
+      .replace(/[^A-ZА-ЯІЇЄҐ0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 4 && !SKIP_WORDS.has(w))
+      .slice(0, 4)
+      .join(' ');
+    if (substance) {
+      const resolved = await resolveTickerByName(substance);
+      if (resolved) potentialTickers.push(resolved.toUpperCase());
+    }
   }
 
   let liveData = '';
