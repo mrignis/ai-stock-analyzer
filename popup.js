@@ -471,6 +471,9 @@ function runAnalysis() {
   // Check cache first — show result instantly if available
   cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
     if (currentTicker !== raw) return; // a newer analysis started — drop stale callback
+    // A cached analysis without a live price is a broken artifact (e.g. the
+    // pre-registry fabrications) — ignore it and fetch fresh instead
+    if (cached && (!cached._quote || !cached._quote.c)) cached = null;
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
       // Show cached price immediately (instant UX — stale-while-revalidate)
