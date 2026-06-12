@@ -579,7 +579,7 @@ const SKIP_WORDS = new Set([
   // Greetings & chat words that collide with real tickers (HI = Hillenbrand!)
   'HI','HEY','OK','YES','YEAH','THX','LOL','PLS','BYE','HMM',
   // Generic finance nouns that are also tickers (FIRM, EV, CEO...)
-  'FIRM','EV','CEO','IPO','ETF','USD','EUR','API',
+  'FIRM','EV','CEO','IPO','ETF','USD','EUR','API','DEALS','DEAL','LAST','PAST',
   'RISK','RATE','PLAN','OPEN','STOP','KEEP','CASH','IDEA','ONES','BOTH',
   'ABOVE','BELOW','ABOUT','AFTER','AGAIN','PRICE','STOCK','SHARE','TRADE','WORTH',
   'TODAY','SINCE','THINK','FEELS','LOOKS','MAYBE','RIGHT','WRONG','STILL','OTHER',
@@ -676,7 +676,7 @@ async function handleChat(request, env) {
     'STYLE RULES: Be dense and specific. Every sentence must contain a concrete fact (number, date, event, name) or a direct answer. FORBIDDEN: filler and obvious generalities like "prices can change over time", "one of the largest companies in the world", "many factors influence the price", "it is worth noting". Never repeat the same idea twice. Default length 3-6 short sentences; go longer only if the user asks for detail.',
     'News headlines may mention several companies — attribute each fact to the correct company, never mix them up.',
     'Treat a word as a stock ticker ONLY if live data for it is provided above, or the user wrote it in CAPITALS (TSLA, NOW). Lowercase common words ("now", "all", "key", "open") are ordinary English words — never reinterpret them as tickers.',
-    'Generic references — "the firm", "the company", "it", "фірма", "компанія" — and ambiguous follow-ups ("what about now?", "tell me firm info", "а зараз?") always mean the most recently discussed company. NEVER reply "I do not have info" when live data for the discussed ticker is right above — use it. For price follow-ups give 2-3 sentences: the price and day change, plus one extra concrete detail from the data above (recent news driver, market cap, or how it compares to the day).',
+    'Generic references — "the firm", "the company", "it", "фірма", "компанія" — and ambiguous follow-ups ("what about now?", "tell me firm info", "а зараз?") always mean the most recently discussed company. NEVER reply "I do not have info" when live data for the discussed ticker is right above — use it. If a ticker was discussed but its live data is missing this turn, say the price feed is temporarily busy (try again in a minute) — do NOT imply the ticker is unknown. For price follow-ups give 2-3 sentences: the price and day change, plus one extra concrete detail from the data above (recent news driver, market cap, or how it compares to the day).',
     'Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
