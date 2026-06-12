@@ -2,24 +2,27 @@
 
 AI-powered Chrome extension for real-time stock & crypto analysis. **Completely free — no setup required.**
 
-![Version](https://img.shields.io/badge/version-2.0-green) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Version](https://img.shields.io/badge/version-2.1-green) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## ✨ Features
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Analysis** | Full stock/crypto analysis powered by Groq Llama 3.3 70B |
-| 💬 **AI Chat** | Ask anything about stocks with live price context |
+| 🤖 **AI Analysis** | Full stock/crypto analysis — Llama 3.3 70B with an instant fallback engine for peak hours |
+| 💬 **Smart AI Chat** | Live prices, company profile, recent news and Wikipedia background in every answer; keeps conversation context ("what about now?" just works) |
+| 🔎 **Company Registry** | Ask by name in any case — "ferrari", "servicenow", "coca cola" — resolved to the right ticker via Yahoo's symbol registry |
+| 🎯 **Price Targets** | "Tell me when TSLA falls below $300" — checked every minute, one-shot notification |
+| 💼 **Portfolio with Lots** | Wealthsimple-style: one position per ticker, expandable purchase history, weighted average cost, P&L |
+| 💱 **21 Currencies** | View all prices in USD, EUR, UAH, GBP, JPY, PLN and more — chat converts too |
 | 📈 **Real Charts** | 30-day real price history via Yahoo Finance |
-| 💰 **Live Prices** | Real-time prices — Finnhub primary, Yahoo Finance fallback |
-| 📋 **Watchlist** | Track your favorite stocks with live prices |
-| 💼 **Portfolio Tracker** | Track P&L across all your positions |
+| 💰 **Live Prices** | Finnhub primary, Yahoo fallback, ~120ms edge-cached — consistent across all tabs |
+| 📋 **Watchlist** | Track your favorite stocks with live prices and AI verdicts |
 | 📰 **News Feed** | Latest company news per ticker |
-| 🔔 **Price Alerts** | Background notifications when stocks move past your threshold |
+| 🔔 **Price Alerts** | Background %-change notifications with the full watchlist picture in one toast |
 | 🌙☀️ **Dark / Light Theme** | Switchable themes with warm cream light mode |
 | 📌 **Pin Window** | Open as a floating window that stays open while you work |
 | 🇺🇦🇬🇧 **Bilingual** | Full Ukrainian and English support |
-| ⚡ **Smart Cache** | Instant results from cache — market 5min, analysis 15min, prices 2min |
+| ⚡ **Instant UI** | Stale-while-revalidate everywhere — cached numbers paint instantly, live data replaces them silently |
 
 ## 🚀 Installation
 
@@ -40,21 +43,23 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 
 1. Click the 📈 icon in the Chrome toolbar
 2. Enter a stock or crypto ticker — `TSLA`, `AAPL`, `BTC`, `CARDANO`...
-3. Click **Analyze** — get full AI analysis in seconds
+3. Click **Analyze** — the live price appears instantly, full AI analysis in seconds
 4. Scroll down to see sector, risk, trend, forecast, chart and AI conclusion
-5. Use **💬 Chat** to ask follow-up questions with automatic context
+5. Use **💬 Chat** to ask anything — by ticker or by name ("what about ferrari?"), with live data, news and follow-up context
 6. Add to **WL** (Watchlist) to track prices
-7. Open **💼 Portfolio** tab inside WL to track your positions and P&L
-8. Set price alert threshold in **🔔 Alerts** tab
-9. Open **⚙ Settings → 📌 Pin Window** to keep the extension open as a floating window
+7. Open **💼 Portfolio** tab inside WL — add buys of the same ticker and they merge into one position with purchase history
+8. In **🔔 Alerts**: set a %-change threshold and add 🎯 price targets ("notify when TSLA falls below $300")
+9. Pick your display currency in **⚙ Settings** (21 supported)
+10. **⚙ Settings → 📌 Pin Window** keeps the extension open as a floating window
 
 ## 💡 Tech Stack
 
-- **Chrome Extension** — Manifest V3
-- **Cloudflare Workers** — free serverless backend
-- **Groq API** — Llama 3.3 70B (free tier, OpenAI-compatible)
-- **Finnhub API** — real-time stock quotes, company data, news
-- **Yahoo Finance** — 30-day price history charts + fallback prices
+- **Chrome Extension** — Manifest V3, vanilla JS, zero dependencies
+- **Cloudflare Workers** — free serverless backend with 20s edge caching
+- **Groq API** — Llama 3.3 70B primary + Llama 3.1 8B-instant fallback (free tier)
+- **Finnhub API** — real-time stock quotes, company profiles, news
+- **Yahoo Finance** — price history charts, fallback prices, FX rates, symbol search
+- **Wikipedia API** — company background for the AI chat
 
 ## 🔒 Privacy
 
