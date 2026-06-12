@@ -529,11 +529,16 @@ function runAnalysis() {
         if (currentTicker !== raw) return; // stale response — user already analyzes another ticker
         if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
         cacheSet(cacheKey, data); // Save to cache (includes lang)
+        // The server may resolve a typed NAME to a real symbol (SIXT -> TSLX):
+        // use the resolved ticker for the price and the header, or the price
+        // lookup misses and the box stays empty
+        var realT = data._ticker || raw;
+        currentTicker = realT;
         // Seed price cache from _quote (fresh, just fetched by /analyze)
         // so fetchFreshPrice doesn't make a redundant /price call
-        if (data._quote && data._quote.c > 0) cacheSet('price_' + raw, data._quote);
-        fetchFreshPrice(raw, data);
-        finish(raw, normalizeAI(data));
+        if (data._quote && data._quote.c > 0) cacheSet('price_' + realT, data._quote);
+        fetchFreshPrice(realT, data);
+        finish(realT, normalizeAI(data));
       })
       .catch(function(e) {
         clearTimeout(timeoutId);

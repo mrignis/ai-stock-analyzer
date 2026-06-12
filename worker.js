@@ -386,8 +386,10 @@ async function handleAnalyze(request, env, _retried) {
   // resolve via Yahoo's registry so users can find any firm (tester request).
   // One cheap quote probe decides: real ticker -> proceed; otherwise ask the
   // registry ONCE before the expensive pipeline (no double Groq runs).
-  {
-    const probe = await finnhubQuote(env, CRYPTO_MAP[CRYPTO_NAMES[raw] || raw] || (CRYPTO_NAMES[raw] || raw));
+  // Known crypto NEVER goes to the registry — a flaky Finnhub probe must not
+  // turn BTC into "Did you mean BTC-USD?" (regression caught by Pylyp)
+  if (!CRYPTO_MAP[CRYPTO_NAMES[raw] || raw]) {
+    const probe = await finnhubQuote(env, CRYPTO_NAMES[raw] || raw);
     if (!probe || !probe.c || probe.c === 0) {
       const resolved = await resolveTickerByName(raw);
       if (resolved && resolved.sym && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.sym.toUpperCase())) {
@@ -422,8 +424,11 @@ async function handleAnalyze(request, env, _retried) {
   ]);
 
   // .catch: Finnhub 429s return HTML pages — treat as empty, never crash
-  const safeJson = (r, fb) => r.status === 'fulfilled' ? r.value.json().catch(() => fb) : fb;
-  const quote   = await safeJson(quoteRes, {});
+  // Promise.resolve: crypto path uses stub objects whose json() is synchronous
+  const safeJson = (r, fb) => r.status === 'fulfilled'
+    ? Promise.resolve(r.value.json()).catch(() => fb)
+    : fb;
+  let quote     = await safeJson(quoteRes, {});
   const profile = await safeJson(profileRes, {});
   const newsRaw = await safeJson(newsRes, []);
   const metrics = await safeJson(metricsRes, {});
@@ -432,7 +437,14 @@ async function handleAnalyze(request, env, _retried) {
   // exist — refuse instead of letting the AI invent a company (test finding).
   // Last chance: maybe it's a company NAME ("INTEL") — ask the registry once.
   if ((!quote.c || quote.c === 0) && !profile.name) {
-    return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
+    // Last chance before refusing: getLivePrice has the Yahoo fallback —
+    // saves crypto and rate-limited moments (BTC regression, caught by Pylyp)
+    const lp = await getLivePrice(env, t);
+    if (lp && lp.c > 0) {
+      quote = { c: lp.c, pc: lp.pc, dp: pctChange(lp.c, lp.pc) };
+    } else {
+      return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
+    }
   }
 
   const news = Array.isArray(newsRaw)
@@ -486,6 +498,7 @@ Return ONLY this JSON structure:
   return json({
     ...analysis,
     _quote: quote,
+    _ticker: t, // resolved symbol — client may have typed a company name
     _country: profile.country || null,
     _name: profile.name || null,
   });
