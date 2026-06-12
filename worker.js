@@ -265,17 +265,26 @@ async function fetchCompanyInfo(env, t) {
 
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
 // "servicenow" → NOW. Noise queries return empty — safe to call with raw text.
+// Hybrid resolver (team vote, fixes "intell"→BOTZ): exact/prefix match gives
+// a confident symbol; otherwise return top candidates so the caller can ask
+// "did you mean…?" instead of silently picking a substring match.
 async function resolveTickerByName(text) {
   try {
     const r = await fetch(
       'https://query1.finance.yahoo.com/v1/finance/search?q=' +
-      encodeURIComponent(text.slice(0, 80)) + '&quotesCount=1&newsCount=0',
+      encodeURIComponent(text.slice(0, 80)) + '&quotesCount=3&newsCount=0',
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     const d = await r.json();
-    const q = (d.quotes || [])[0];
-    // High score = confident match; skip foreign listings (RACE.MI etc.)
-    if (q && q.symbol && (q.score || 0) > 10000 && !q.symbol.includes('.')) return q.symbol;
+    const quotes = (d.quotes || []).filter(q =>
+      q.symbol && (q.score || 0) > 10000 && !q.symbol.includes('.'));
+    if (!quotes.length) return null;
+    const Q = text.trim().toUpperCase();
+    const starts = s => (s || '').toUpperCase().startsWith(Q);
+    const hit = quotes.find(q =>
+      q.symbol.toUpperCase() === Q || starts(q.longname) || starts(q.shortname));
+    if (hit) return { sym: hit.symbol };
+    return { candidates: quotes.map(q => q.symbol + ' (' + (q.longname || q.shortname || '?') + ')') };
   } catch { /* registry is optional — detection just stays empty */ }
   return null;
 }
@@ -381,9 +390,11 @@ async function handleAnalyze(request, env, _retried) {
     const probe = await finnhubQuote(env, CRYPTO_MAP[CRYPTO_NAMES[raw] || raw] || (CRYPTO_NAMES[raw] || raw));
     if (!probe || !probe.c || probe.c === 0) {
       const resolved = await resolveTickerByName(raw);
-      // Accept only clean symbols — Yahoo can return futures/odd formats
-      if (resolved && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.toUpperCase())) {
-        raw = resolved.toUpperCase();
+      if (resolved && resolved.sym && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.sym.toUpperCase())) {
+        raw = resolved.sym.toUpperCase();
+      } else if (resolved && resolved.candidates) {
+        return json({ error: (lang === 'ua' ? 'Можливо, ви мали на увазі: ' : 'Did you mean: ') +
+          resolved.candidates.join(', ') + '?' }, 404);
       }
     }
   }
@@ -597,12 +608,17 @@ async function handleChat(request, env) {
       .join(' ');
     if (substance) {
       const resolved = await resolveTickerByName(substance);
-      if (resolved) potentialTickers.push(resolved.toUpperCase());
+      if (resolved && resolved.sym) potentialTickers.push(resolved.sym.toUpperCase());
+      else if (resolved && resolved.candidates) candidateNote =
+        'The query did not match a ticker exactly. Possible matches: ' +
+        resolved.candidates.join(', ') +
+        '. Ask the user which one they meant — do NOT silently pick one.';
     }
   }
 
   let liveData = '';
   let companyInfo = '';
+  let candidateNote = '';
   if (potentialTickers.length > 0) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
@@ -628,6 +644,7 @@ async function handleChat(request, env) {
     context ? `Current stock analysis context (treat as ground truth): ${context}` : '',
     liveData,
     companyInfo,
+    candidateNote,
     companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
     (userCurrency && userCurrency !== 'USD' && userFxRate > 0)
