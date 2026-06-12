@@ -368,11 +368,18 @@ async function handlePrice(request, env) {
 }
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
-async function handleAnalyze(request, env) {
+async function handleAnalyze(request, env, _retried) {
   const { ticker, lang } = await request.json();
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
-  const raw = ticker.toUpperCase().trim();
+  let raw = ticker.toUpperCase().trim();
+  // Company NAME in the search box? ("INTEL", "FERRARI", "интел") —
+  // resolve via Yahoo's registry so users can find any firm (tester request).
+  // Only when it's clearly not a ticker: >5 chars or no Finnhub quote.
+  if (raw.length > 5 || !/^[A-Z0-9.\-:/]+$/.test(raw)) {
+    const resolved = await resolveTickerByName(raw);
+    if (resolved) raw = resolved.toUpperCase();
+  }
   // Reject suspiciously long or malformed tickers before they enter the AI prompt
   if (raw.length > 15 || !/^[A-Z0-9.\-:/]+$/.test(raw)) {
     return json({ error: 'Invalid ticker' }, 400);
@@ -396,14 +403,26 @@ async function handleAnalyze(request, env) {
       : fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${env.FINNHUB_KEY}`),
   ]);
 
-  const quote   = quoteRes.status   === 'fulfilled' ? await quoteRes.value.json()   : {};
-  const profile = profileRes.status === 'fulfilled' ? await profileRes.value.json() : {};
-  const newsRaw = newsRes.status    === 'fulfilled' ? await newsRes.value.json()    : [];
-  const metrics = metricsRes.status === 'fulfilled' ? await metricsRes.value.json() : {};
+  // .catch: Finnhub 429s return HTML pages — treat as empty, never crash
+  const safeJson = (r, fb) => r.status === 'fulfilled' ? r.value.json().catch(() => fb) : fb;
+  const quote   = await safeJson(quoteRes, {});
+  const profile = await safeJson(profileRes, {});
+  const newsRaw = await safeJson(newsRes, []);
+  const metrics = await safeJson(metricsRes, {});
 
   // Unknown ticker guard: no price AND no profile = the symbol does not
-  // exist — refuse instead of letting the AI invent a company (test finding)
+  // exist — refuse instead of letting the AI invent a company (test finding).
+  // Last chance: maybe it's a company NAME ("INTEL") — ask the registry once.
   if ((!quote.c || quote.c === 0) && !profile.name) {
+    if (!_retried) {
+      const resolved = await resolveTickerByName(t);
+      if (resolved && resolved.toUpperCase() !== t) {
+        return await handleAnalyze(new Request(request.url, {
+          method: 'POST',
+          body: JSON.stringify({ ticker: resolved, lang }),
+        }), env, true);
+      }
+    }
     return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
   }
 
