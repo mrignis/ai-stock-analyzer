@@ -216,6 +216,33 @@ async function getLivePrice(env, t) {
 
 // Deep company info for chat: profile + recent news + Wikipedia background.
 // Returns a compact string for the system prompt ('' when nothing found).
+// Recent daily closes WITH dates, so chat can answer "what was the price 2
+// days ago?" — the data exists in /candle, we just feed the last 7 days in.
+async function fetchRecentCloses(t) {
+  const yahooSym = CRYPTO_MAP[t] ? t + '-USD' : t;
+  try {
+    const res = await fetchT(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1d&range=1mo`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    if (!res.ok) return '';
+    const result = (await res.json())?.chart?.result?.[0];
+    const ts = result?.timestamp;
+    const closes = result?.indicators?.quote?.[0]?.close;
+    if (!ts || !closes) return '';
+    const rows = [];
+    for (let i = 0; i < ts.length; i++) {
+      if (closes[i] == null) continue;
+      rows.push(new Date(ts[i] * 1000).toISOString().slice(0, 10) + ': $' + closes[i].toFixed(2));
+    }
+    if (rows.length < 2) return '';
+    return `Recent daily closing prices for ${t} (oldest to newest, use these for "price N days ago" questions): ` +
+      rows.slice(-7).join(', ') + '.';
+  } catch {
+    return '';
+  }
+}
+
 async function fetchCompanyInfo(env, t) {
   if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
 
@@ -639,6 +666,7 @@ async function handleChat(request, env) {
 
   let liveData = '';
   let companyInfo = '';
+  let priceHistory = '';
   if (potentialTickers.length > 0) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
@@ -647,7 +675,10 @@ async function handleChat(request, env) {
     // Deep info follows the first ticker WITH a live price — "firm" (no price)
     // must not steal it from the Intel being discussed
     const primary = results.find(r => r.d && r.d.c > 0);
-    const info = primary ? await fetchCompanyInfo(env, primary.ticker) : '';
+    // Profile/news and recent daily closes fetched together for the primary ticker
+    const [info, history] = primary
+      ? await Promise.all([fetchCompanyInfo(env, primary.ticker), fetchRecentCloses(primary.ticker)])
+      : ['', ''];
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
       .map(r => {
@@ -656,6 +687,7 @@ async function handleChat(request, env) {
       });
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
     companyInfo = info;
+    priceHistory = history;
   }
 
   const system = [
@@ -665,6 +697,8 @@ async function handleChat(request, env) {
     'Never contradict live data with training knowledge. NEVER give specific prices, percentages, or market cap figures from your training data — those are outdated and wrong. Only state prices that appear in the live data or context provided. If you do not have live data for a ticker, say you do not have current price info rather than guessing.',
     context ? `Current stock analysis context (treat as ground truth): ${context}` : '',
     liveData,
+    priceHistory,
+    priceHistory ? 'For questions about past prices ("2 days ago", "last week", "yesterday"), use the recent daily closing prices above — count back from today. Give the actual dated price, do NOT say you lack historical data.' : '',
     companyInfo,
     candidateNote,
     companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
