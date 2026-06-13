@@ -612,6 +612,30 @@ const SKIP_WORDS = new Set([
   'TODAY','SINCE','THINK','FEELS','LOOKS','MAYBE','RIGHT','WRONG','STILL','OTHER',
 ]);
 
+// Cyrillic → Latin so "тесла"/"інтел" reach Yahoo's registry (it rejects
+// Cyrillic outright). Yahoo's fuzzy match handles the rest (tesla→TSLA).
+const TRANSLIT = {
+  'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh',
+  'з':'z','и':'y','і':'i','ї':'i','й':'i','к':'k','л':'l','м':'m','н':'n',
+  'о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts',
+  'ч':'ch','ш':'sh','щ':'shch','ь':'','ю':'iu','я':'ia','ы':'y','э':'e','ъ':'',
+};
+function translit(s) {
+  return s.toLowerCase().replace(/[а-яіїєґыэъ]/g, ch => TRANSLIT[ch] != null ? TRANSLIT[ch] : ch);
+}
+
+// Cyrillic filler words (4+ chars) stripped before name resolution, so
+// "ціна тесла була назад" → just "тесла" reaches the registry
+const CYR_SKIP = new Set([
+  'ЦІНА','ЦІНУ','ЦІНИ','ЦЕНА','ВАРТІСТЬ','КОШТУЄ','КОШТУВАЛА','СКІЛЬКИ','СКОЛЬКО',
+  'СТОИТ','БУЛА','БУЛО','НАЗАД','ТОМУ','АКЦІЯ','АКЦІЇ','АКЦІЙ','АКЦИЯ','КОМПАНІЯ',
+  'КОМПАНІЮ','КОМПАНІЇ','КОМПАНИЯ','ЯКИЙ','ДЕНЬ','ДНІВ','ТИЖДЕНЬ','ТИЖНІ','ЗАРАЗ',
+  'СЬОГОДНІ','СЕГОДНЯ','ВЧОРА','ВЧЕРА','ПОЗАВЧОРА','РОЗКАЖИ','ПОКАЖИ','ІНФОРМАЦІЯ',
+  'ІНФО','ЧОТИРИ','МЕНІ','ТОБІ','БУДЬ','ЛАСКА','МОЖЕШ','ДІЗНАТИСЯ','ХОЧУ','ТРЕБА',
+  'ПОТРІБНО','ЩОСЬ','ТАКОЖ','СЕЙЧАС','БЫЛА','НОВИНИ','ПРОГНОЗ','ВАРТО','КУПУВАТИ',
+  'ПРОДАВАТИ','ДОБРЕ','ПОГАНО',
+]);
+
 async function handleChat(request, env) {
   const { messages, context, lang, currency: userCurrency, fxRate: userFxRate } = await request.json();
   if (!messages || !messages.length) return json({ error: 'No messages' }, 400);
@@ -648,11 +672,13 @@ async function handleChat(request, env) {
     const substance = upperLast
       .replace(/[^A-ZА-ЯІЇЄҐ0-9 ]/g, ' ')
       .split(/\s+/)
-      .filter(w => w.length >= 4 && !SKIP_WORDS.has(w))
+      .filter(w => w.length >= 4 && !SKIP_WORDS.has(w) && !CYR_SKIP.has(w))
       .slice(0, 4)
       .join(' ');
     if (substance) {
-      const resolved = await resolveTickerByName(substance);
+      // Yahoo's registry rejects Cyrillic — transliterate so "тесла" → "tesla"
+      const query = /[а-яіїєґ]/i.test(substance) ? translit(substance) : substance;
+      const resolved = await resolveTickerByName(query);
       if (resolved && resolved.sym) lastTickers.push(resolved.sym.toUpperCase());
       else if (resolved && resolved.candidates && convTickers.length === 0) candidateNote =
         'The query did not match a ticker exactly. Possible matches: ' +
