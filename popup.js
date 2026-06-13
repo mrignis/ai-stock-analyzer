@@ -431,13 +431,16 @@ function renderHomeWatchlist() {
   var itemsEl = document.getElementById('home-wl-items');
   if (!watchlist.length) { container.style.display = 'none'; return; }
   container.style.display = 'block';
-  var shown = watchlist.slice(0, 4);
+  // Show more of the user's curated list (was 4) so home fills the gap —
+  // the watchlist IS the chosen set, so add/remove there controls home
+  var shown = watchlist.slice(0, 6);
   var html = '';
   shown.forEach(function(w) {
     var pill = pillClass(w.color);
     html += '<div class="hwl-item" data-ticker="' + w.ticker + '">' +
       '<span class="hwl-ticker">' + w.ticker + '</span>' +
       '<span class="hwl-price" id="hwp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
+      '<canvas class="hwl-spark" id="hwspark-' + w.ticker + '"></canvas>' +
       '<span class="hwl-pct" id="hwpc-' + w.ticker + '"></span>' +
       '<span class="verdict-pill ' + pill + '" style="font-size:9px">' + normalizeVerdict(w.verdict||'', lang) + '</span>' +
     '</div>';
@@ -451,10 +454,25 @@ function renderHomeWatchlist() {
     });
   });
 
-  // Fetch live prices (with cache)
+  // Fetch live prices (with cache) + draw a mini trend sparkline per row
   shown.forEach(function(w) {
     loadLivePriceSWR(w.ticker, function(d) {
       applyPriceToElements(d, 'hwp-' + w.ticker, 'hwpc-' + w.ticker);
+    });
+    cacheGet('candle_' + w.ticker, CACHE_CANDLE_TTL, function(cached) {
+      if (cached && cached.length >= 2) {
+        drawSpark('hwspark-' + w.ticker, cached, cached[cached.length - 1] >= cached[0]);
+        return;
+      }
+      fetch(WORKER_URL + '/candle?ticker=' + w.ticker)
+        .then(function(r) { return r.json(); })
+        .then(function(c) {
+          if (c.c && c.c.length >= 2) {
+            cacheSet('candle_' + w.ticker, c.c);
+            drawSpark('hwspark-' + w.ticker, c.c, c.c[c.c.length - 1] >= c.c[0]);
+          }
+        })
+        .catch(function() {});
     });
   });
 }
@@ -902,7 +920,7 @@ function drawChartSimulated(dir, color) {
 function drawSpark(canvasId, prices, up) {
   var canvas = document.getElementById(canvasId);
   if (!canvas || !prices || prices.length < 2) return;
-  var W = canvas.offsetWidth || 100, H = 22;
+  var W = canvas.offsetWidth || 100, H = canvas.offsetHeight || 22;
   canvas.width = W; canvas.height = H;
   var ctx = canvas.getContext('2d');
   var min = Math.min.apply(null, prices);
