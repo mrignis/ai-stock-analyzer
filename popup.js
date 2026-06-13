@@ -380,11 +380,32 @@ function renderMarketCards(data) {
       '<div class="mcard-label">' + icons[k] + ' ' + d.label + '</div>' +
       '<div class="mcard-price">' + price + '</div>' +
       '<div class="mcard-pct" style="color:' + color + '">' + (up?'▲':'▼') + Math.abs(d.pct).toFixed(2) + '%</div>' +
+      '<canvas class="mcard-spark" id="spark-' + k + '"></canvas>' +
     '</div>';
   });
   var el = document.getElementById('market-cards');
   if (!el) return;
   el.innerHTML = html;
+
+  // Mini trend sparklines (cousin's "fill the gap with graphs" feedback) —
+  // 30-day candles, 30-min cached so the home screen loads them only once
+  keys.forEach(function(k) {
+    if (!data[k]) return;
+    var ticker = CARD_TICKERS[k];
+    var up = data[k].pct >= 0;
+    cacheGet('candle_' + ticker, CACHE_CANDLE_TTL, function(cached) {
+      if (cached) { drawSpark('spark-' + k, cached, up); return; }
+      fetch(WORKER_URL + '/candle?ticker=' + ticker)
+        .then(function(r) { return r.json(); })
+        .then(function(c) {
+          if (c.c && c.c.length >= 2) {
+            cacheSet('candle_' + ticker, c.c);
+            drawSpark('spark-' + k, c.c, up);
+          }
+        })
+        .catch(function() {});
+    });
+  });
 
   // Make cards clickable
   el.querySelectorAll('.mcard').forEach(function(card) {
@@ -875,6 +896,41 @@ function drawChartSimulated(dir, color) {
     pts.push({ x: pad + (i / 29) * (W - pad*2), y: y });
   }
   drawChartLine(canvas, pts, CHART_COLORS[color] || '#60a5fa', (pts[29].y - pts[0].y) / pts[0].y * -100);
+}
+
+// Tiny sparkline for the market cards — thin line + soft fill, green/red by trend
+function drawSpark(canvasId, prices, up) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas || !prices || prices.length < 2) return;
+  var W = canvas.offsetWidth || 100, H = 22;
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext('2d');
+  var min = Math.min.apply(null, prices);
+  var max = Math.max.apply(null, prices);
+  var range = max - min || 1;
+  var n = prices.length;
+  var pad = 2;
+  var x = function(i) { return (i / (n - 1)) * W; };
+  var y = function(p) { return H - pad - ((p - min) / range) * (H - pad * 2); };
+  var stroke = up ? '#22C55E' : '#EF4444';
+
+  // soft fill under the line
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (var i = 0; i < n; i++) ctx.lineTo(x(i), y(prices[i]));
+  ctx.lineTo(W, H);
+  ctx.closePath();
+  ctx.fillStyle = up ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)';
+  ctx.fill();
+
+  // the trend line
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(prices[0]));
+  for (var j = 1; j < n; j++) ctx.lineTo(x(j), y(prices[j]));
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────────────
