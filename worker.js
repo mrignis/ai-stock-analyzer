@@ -236,8 +236,10 @@ async function fetchRecentCloses(t) {
       rows.push(new Date(ts[i] * 1000).toISOString().slice(0, 10) + ': $' + closes[i].toFixed(2));
     }
     if (rows.length < 2) return '';
-    return `Recent daily closing prices for ${t} (oldest to newest, use these for "price N days ago" questions): ` +
-      rows.slice(-7).join(', ') + '.';
+    // Full ~30 calendar days (≈22 trading days) so "a week ago", "a month
+    // ago", "30 days ago" all resolve — not just "2 days ago"
+    return `Daily closing prices for ${t} over the last 30 days (oldest to newest, use these for ANY "price N days/weeks ago" question — count back from today): ` +
+      rows.slice(-30).join(', ') + '.';
   } catch {
     return '';
   }
@@ -321,6 +323,17 @@ const NAME_TO_TICKER = {
   'MICROSOFT': 'MSFT', 'APPLE': 'AAPL', 'TESLA': 'TSLA', 'GOOGLE': 'GOOGL',
   'AMAZON': 'AMZN', 'NVIDIA': 'NVDA', 'META': 'META', 'FACEBOOK': 'META',
   'NETFLIX': 'NFLX', 'INTEL': 'INTC', 'AMD': 'AMD', 'DISNEY': 'DIS',
+};
+
+// Common company/crypto names in Cyrillic → ticker, so follow-ups keep the
+// thread ("тесла" two messages back still counts on "а тиждень тому?")
+const CYRILLIC_NAMES = {
+  'ТЕСЛА':'TSLA','НВІДІА':'NVDA','НВИДИА':'NVDA','ІНТЕЛ':'INTC','ИНТЕЛ':'INTC',
+  'ЕПЛ':'AAPL','ЕППЛ':'AAPL','ЯБЛУКО':'AAPL','МАЙКРОСОФТ':'MSFT','АМАЗОН':'AMZN',
+  'ГУГЛ':'GOOGL','ГУГЛ':'GOOGL','МЕТА':'META','ФЕЙСБУК':'META','НЕТФЛІКС':'NFLX',
+  'НЕТФЛИКС':'NFLX','ДІСНЕЙ':'DIS','БІТКОЇН':'BTC','БІТКОІН':'BTC','БИТКОИН':'BTC',
+  'ЕФІР':'ETH','ЕФІРІУМ':'ETH','ЕФИР':'ETH','СОЛАНА':'SOL','КАРДАНО':'ADA',
+  'ДОДЖ':'DOGE','РІПЛ':'XRP','РИПЛ':'XRP',
 };
 
 // ── Yahoo Finance price helper (fallback) ─────────────────────────────────────
@@ -661,7 +674,11 @@ async function handleChat(request, env) {
     const named = [...Object.entries(NAME_TO_TICKER), ...Object.entries(CRYPTO_NAMES)]
       .filter(([name]) => new RegExp('\\b' + name + '\\b').test(text))
       .map(([, t]) => t);
-    return raw.filter(t => !SKIP_WORDS.has(t)).concat(named);
+    // Cyrillic names via exact word membership (JS \b is ASCII-only, so split instead)
+    const cyrNamed = text.split(/[^A-ZА-ЯІЇЄҐ0-9]+/)
+      .filter(w => CYRILLIC_NAMES[w])
+      .map(w => CYRILLIC_NAMES[w]);
+    return raw.filter(t => !SKIP_WORDS.has(t)).concat(named, cyrNamed);
   };
 
   const lastTickers = tickersIn(upperLast);
