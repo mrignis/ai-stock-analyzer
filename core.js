@@ -165,3 +165,8 @@ function timeAgo(ts, long) {
   if (diff < 1440) return Math.floor(diff / 60) + (ua ? (' год' + suf) : 'h ago');
   return Math.floor(diff / 1440) + (ua ? (' д' + suf) : 'd ago');
 }
+
+// Escape HTML — shared by chat (renderConvList) and news (XSS protection)
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
