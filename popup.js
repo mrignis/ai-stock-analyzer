@@ -1218,6 +1218,18 @@ function timeAgoNews(ts) {
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
+
+// Reactive refresh: when the background fires a price target (or updates prices),
+// it rewrites storage. Re-render the open Alerts panel immediately instead of
+// guessing with a fixed timer — fixes "target fired but still shows in the list".
+chrome.storage.onChanged.addListener(function(changes, area) {
+  if (area !== 'local') return;
+  var alertsOpen = document.getElementById('panel-alerts').classList.contains('active');
+  if (!alertsOpen) return;
+  if (changes.priceTargets) renderTargets(changes.priceTargets.newValue || []);
+  if (changes.priceAlerts) renderAlertPrices(changes.priceAlerts.newValue || {});
+});
+
 function initAlerts() {
   chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets'], function(s) {
     var threshold = s.alertThreshold || 3;
