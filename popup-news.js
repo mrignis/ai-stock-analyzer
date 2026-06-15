@@ -99,7 +99,10 @@ function renderNews(ticker, articles) {
   // Attach click handlers via JS (CSP forbids inline onclick in extensions)
   listEl.querySelectorAll('.news-item[data-url]').forEach(function(item) {
     item.addEventListener('click', function() {
-      chrome.tabs.create({ url: this.getAttribute('data-url') });
+      // Defense-in-depth: only open http(s) URLs. A compromised news API
+      // could return javascript:/data: — never hand those to tabs.create.
+      var u = this.getAttribute('data-url');
+      if (/^https?:\/\//i.test(u)) chrome.tabs.create({ url: u });
     });
   });
 }
