@@ -3,3 +3,8 @@ node_modules/
 .dev.vars
 *.env
 ROADMAP.md
+
+# dev tooling / local — not part of the extension
+tests/
+.claude/
+make_icons.py
