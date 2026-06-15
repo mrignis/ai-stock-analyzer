@@ -63,7 +63,10 @@
       "Bash(curl -s \"https://stock-ai-analyzer.chelb-dev.workers.dev/price?ticker=QQQ\")",
       "Bash(python -c \"import json,sys; print\\(json.load\\(sys.stdin\\)['c']\\)\")",
       "Bash(cat)",
-      "Bash(awk -F: '{print $1}')"
+      "Bash(awk -F: '{print $1}')",
+      "Bash(awk 'NR>=914 && /^function /{print NR\": \"$0}' popup.js)",
+      "Bash(awk 'NR>=480 && NR<=827 && /^function |^var /{print NR\": \"$0}' popup.js)",
+      "Bash(awk 'NR>=480 && NR<=827 && /^var /{print NR\": \"$0}' popup.js)"
     ]
   }
 }
