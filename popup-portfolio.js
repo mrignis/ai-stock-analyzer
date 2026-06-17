@@ -144,7 +144,7 @@ function renderPortfolio() {
   });
 
   // Fetch current prices and compute P&L
-  var totalInvested = 0, totalCurrent = 0;
+  var totalInvested = 0, totalCurrent = 0, totalDayChange = 0;
   var pending = portfolio.length;
   var failed  = 0;
 
@@ -163,11 +163,18 @@ function renderPortfolio() {
       var color = up ? 'var(--green)' : 'var(--red)';
       var sign  = up ? '+' : '';
 
+      // Today's change for this position (Wealthsimple-style): shares × (now − prev close)
+      var dayPct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
+      var dayChg = (d.pc && d.pc > 0) ? posShares(p) * (d.c - d.pc) : 0;
+      totalDayChange += dayChg;
+
       var priceEl = document.getElementById('pf-price-' + i);
       var plEl    = document.getElementById('pf-pl-' + i);
       if (priceEl) {
-        priceEl.textContent = fmtMoney(curPrice) + (lang === 'ua' ? ' зараз' : ' now');
-        priceEl.style.color = 'var(--text)';
+        var dUp = dayPct >= 0;
+        priceEl.innerHTML = '<span style="color:var(--text)">' + fmtMoney(curPrice) + '</span> ' +
+          '<span style="font-size:10px;color:' + (dUp ? 'var(--green)' : 'var(--red)') + '">' +
+          (dUp ? '▲' : '▼') + Math.abs(dayPct).toFixed(1) + (lang === 'ua' ? '% сьогодні' : '% today') + '</span>';
       }
       if (plEl) {
         plEl.innerHTML = '<span style="color:' + color + '">' + sign + fmtMoney(Math.abs(pl)) + '</span>' +
@@ -190,11 +197,18 @@ function renderPortfolio() {
       ? '<div style="font-family:var(--mono);font-size:9px;color:var(--yellow);text-align:center;margin-top:6px">' +
         (lang === 'ua' ? '⚠ ' + failed + ' ціни не завантажились' : '⚠ ' + failed + ' prices unavailable') + '</div>'
       : '';
+    var dUp = totalDayChange >= 0;
+    var dColor = dUp ? 'var(--green)' : 'var(--red)';
+    var dSign = dUp ? '+' : '';
+    // Today's total change — small line under the summary row (keeps the
+    // liked Invested/Current/P&L trio intact, adds the Wealthsimple "today")
+    var todayLine = '<div style="font-family:var(--mono);font-size:10px;text-align:center;margin-top:6px;color:' + dColor + '">' +
+      (lang === 'ua' ? 'Сьогодні: ' : 'Today: ') + dSign + fmtMoney(Math.abs(totalDayChange)) + '</div>';
     summEl.style.display = 'block';
     summEl.innerHTML = '<div class="pf-summary-row">' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Вкладено' : 'Invested') + '</div><div class="pf-sum-val" style="color:var(--text)">' + fmtMoney(totalInvested) + '</div></div>' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">' + (lang === 'ua' ? 'Зараз' : 'Current') + '</div><div class="pf-sum-val" style="color:var(--text)">' + fmtMoney(totalCurrent) + '</div></div>' +
       '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + fmtMoney(Math.abs(pl)) + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
-    '</div>' + partial;
+    '</div>' + todayLine + partial;
   }
 }
