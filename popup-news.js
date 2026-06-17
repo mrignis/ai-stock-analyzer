@@ -107,6 +107,46 @@ function renderNews(ticker, articles) {
   });
 }
 
+// Home-screen market news — fills the empty space below "Popular".
+// Cached client-side ~15 min; worker edge-caches 5 min on top.
+function loadMarketNews() {
+  var box = document.getElementById('home-news-items');
+  if (!box) return;
+  cacheGet('marketnews', CACHE_NEWS_TTL, function(cached) {
+    if (cached) { renderMarketNews(cached); return; }
+    fetch(WORKER_URL + '/market-news')
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        if (Array.isArray(arr) && arr.length) cacheSet('marketnews', arr);
+        renderMarketNews(Array.isArray(arr) ? arr : []);
+      })
+      .catch(function() {});
+  });
+}
+
+function renderMarketNews(articles) {
+  var box = document.getElementById('home-news-items');
+  if (!box) return;
+  if (!articles.length) { document.getElementById('home-news').style.display = 'none'; return; }
+  var html = '';
+  articles.slice(0, 6).forEach(function(n) {
+    var ago = timeAgoNews(n.datetime);
+    var src = n.source ? escHtml(n.source) : '';
+    var clickable = n.url ? ' data-url="' + escHtml(n.url) + '" style="cursor:pointer"' : '';
+    html += '<div class="news-item"' + clickable + '>' +
+      '<div class="news-meta"><span>' + src + '</span><span>' + ago + '</span></div>' +
+      '<div class="news-headline">' + escHtml(n.headline || '') + '</div>' +
+    '</div>';
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('.news-item[data-url]').forEach(function(item) {
+    item.addEventListener('click', function() {
+      var u = this.getAttribute('data-url');
+      if (/^https?:\/\//i.test(u)) chrome.tabs.create({ url: u });
+    });
+  });
+}
+
 function timeAgoNews(ts) {
   if (!ts) return '';
   var diff = Math.max(0, Math.floor((Date.now() / 1000 - ts) / 60));

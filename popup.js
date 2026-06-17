@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // SWR: cached numbers paint instantly, live fetch replaces them silently
       renderHomeWatchlist();
     });
+    loadMarketNews(); // fills the home gap with market headlines
 
     document.getElementById('nav-logo').addEventListener('click', function() {
       if (currentAbort) { currentAbort.abort(); currentAbort = null; }
@@ -233,6 +234,7 @@ var I18N_LABELS = [
   ['lbl-popular', 'Популярні:', 'Popular:'],
   ['lbl-market', 'Ринок', 'Market'],
   ['lbl-home-wl', 'Список', 'Watchlist'],
+  ['lbl-home-news', 'Новини ринку', 'Market news'],
   ['r-disclaimer', 'Не є фінансовою порадою.', 'Not financial advice.'],
   ['lbl-sector', 'Сектор', 'Sector'],
   ['lbl-risk', 'Ризик', 'Risk'],
@@ -337,6 +339,7 @@ function showPanel(id) {
   if (id === 'search') {
     renderHomeWatchlist();
     fetchMarketData();
+    loadMarketNews();
   }
   if (id === 'watchlist') {
     var pfVisible = document.getElementById('portfolio-panel').style.display !== 'none';

@@ -144,6 +144,21 @@ export default {
         }
         return res;
       }
+      // General market news for the home screen — slow-moving, cache 5 min
+      if (url.pathname === '/market-news' && request.method === 'GET') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString());
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+        const res = await handleMarketNews(env);
+        if (res.status === 200) {
+          const cacheable = new Response(res.body, res);
+          cacheable.headers.set('Cache-Control', 'public, max-age=300');
+          ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+          return cacheable;
+        }
+        return res;
+      }
       if (url.pathname === '/analyze' && request.method === 'POST') {
         return await handleAnalyze(request, env);
       }
@@ -567,6 +582,26 @@ async function handleNews(request, env) {
       url:      n.url      || '',
       datetime: n.datetime || 0,
       summary:  n.summary  ? n.summary.slice(0, 180) : '',
+    }));
+    return json(news);
+  } catch (e) {
+    return json([]);
+  }
+}
+
+// ── /market-news — general market headlines for the home screen ──────────────
+async function handleMarketNews(env) {
+  try {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/news?category=general&token=${env.FINNHUB_KEY}`
+    );
+    const raw = await res.json();
+    if (!Array.isArray(raw)) return json([]);
+    const news = raw.slice(0, 10).map(n => ({
+      headline: n.headline || '',
+      source:   n.source   || '',
+      url:      n.url      || '',
+      datetime: n.datetime || 0,
     }));
     return json(news);
   } catch (e) {
