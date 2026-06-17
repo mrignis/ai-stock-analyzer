@@ -40,6 +40,12 @@ function addPortfolioPosition() {
     toast(lang === 'ua' ? '⚠ Заповни всі поля' : '⚠ Fill all fields');
     return;
   }
+  // Security: allow only real ticker characters (same charset as the worker).
+  // CSP already blocks injected handlers; this keeps stored data clean too.
+  if (!/^[A-Z0-9.\-:/]{1,15}$/.test(ticker)) {
+    toast(lang === 'ua' ? '⚠ Невірний тікер' : '⚠ Invalid ticker');
+    return;
+  }
   // Wealthsimple-style: a new buy of an existing ticker becomes a lot
   // inside the same position — summary on top, history preserved
   var lot = { shares: shares, buyPrice: buyPrice, addedAt: Date.now() };
