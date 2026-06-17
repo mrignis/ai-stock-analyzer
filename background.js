@@ -24,7 +24,8 @@ chrome.alarms.onAlarm.addListener(function(alarm) {
 });
 
 function runTargetCheck() {
-  chrome.storage.local.get(['priceTargets', 'lang'], function(s) {
+  chrome.storage.local.get(['priceTargets', 'lang', 'notificationsEnabled'], function(s) {
+    if (s.notificationsEnabled === false) return; // notifications off — don't fire or consume one-shot targets
     checkPriceTargets(s.priceTargets || [], (s.lang || 'ua') === 'ua');
   });
 }
@@ -41,7 +42,7 @@ function fetchPrice(ticker, cb) {
 }
 
 function checkPrices() {
-  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold', 'priceTargets', 'lang'], function(s) {
+  chrome.storage.local.get(['watchlist', 'priceAlerts', 'alertThreshold', 'priceTargets', 'lang', 'notificationsEnabled'], function(s) {
     var watchlist = s.watchlist || [];
     var savedPrices = s.priceAlerts || {};
     var threshold = s.alertThreshold || 3;
@@ -99,7 +100,7 @@ function checkPrices() {
           // Unique ID each time (same-ID re-creates are silently swallowed),
           // old ones cleared, and the toast is force-closed after 7s because
           // Windows otherwise keeps it on screen too long.
-          if (alertsToFire.length > 0) {
+          if (s.notificationsEnabled !== false && alertsToFire.length > 0) {
             // "рухи: 2 з 3" — movers vs. full watchlist, so counts always match the lines
             var title = ua
               ? '📊 AI Stocks — рухи: ' + alertsToFire.length + ' з ' + allLines.length

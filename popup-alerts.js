@@ -18,10 +18,11 @@ chrome.storage.onChanged.addListener(function(changes, area) {
 });
 
 function initAlerts() {
-  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets'], function(s) {
+  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets', 'notificationsEnabled'], function(s) {
     var threshold = s.alertThreshold || 3;
     document.getElementById('threshold-slider').value = threshold;
     document.getElementById('threshold-value').textContent = threshold + '%';
+    setNotifToggle(s.notificationsEnabled !== false); // default ON
     renderTargets(s.priceTargets || []);
     // Instant render from the background snapshot, then refresh with live
     // prices (stale-while-revalidate — same standard as the other tabs)
@@ -41,6 +42,28 @@ function initAlerts() {
         pending--;
         if (pending === 0 && Object.keys(live).length > 0) renderAlertPrices(live);
       });
+    });
+  });
+}
+
+// Notifications on/off — gates background.js from firing any toast.
+function setNotifToggle(enabled) {
+  var btn = document.getElementById('notif-toggle');
+  if (!btn) return;
+  var ua = lang === 'ua';
+  btn.textContent = enabled ? (ua ? 'Увімкнено' : 'On') : (ua ? 'Вимкнено' : 'Off');
+  btn.style.color = enabled ? 'var(--green)' : 'var(--dim)';
+}
+
+function toggleNotifications() {
+  chrome.storage.local.get(['notificationsEnabled'], function(s) {
+    var enabled = (s.notificationsEnabled === false); // currently off -> turn on, else off
+    chrome.storage.local.set({ notificationsEnabled: enabled }, function() {
+      setNotifToggle(enabled);
+      var ua = lang === 'ua';
+      toast(enabled
+        ? (ua ? '🔔 Сповіщення увімкнено' : '🔔 Notifications on')
+        : (ua ? '🔕 Сповіщення вимкнено' : '🔕 Notifications off'));
     });
   });
 }

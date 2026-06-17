@@ -157,6 +157,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
     document.getElementById('btn-add-target').addEventListener('click', addPriceTarget);
+    document.getElementById('notif-toggle').addEventListener('click', toggleNotifications);
     document.getElementById('target-price').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPriceTarget(); });
     document.getElementById('btn-check-now').addEventListener('click', function() {
       chrome.runtime.sendMessage({ action: 'checkNow' }, function() {
@@ -218,55 +219,77 @@ function applyTheme() {
 }
 
 // ── Lang ──────────────────────────────────────────────────────────────────────
+// Data table for applyLang(): [elementId, ua, en, prop?].
+// prop defaults to 'textContent' (also 'placeholder' / 'title').
+var I18N_LABELS = [
+  ['lang-btn', 'UA', 'EN'],                 // shows the CURRENT language; click switches
+  ['tab-search', 'Пошук', 'Search'],
+  ['tab-watchlist', 'Список', 'Watchlist'],
+  ['tab-history', 'Історія', 'History'],
+  ['analyze-btn', 'Аналіз', 'Analyze'],
+  ['lbl-popular', 'Популярні:', 'Popular:'],
+  ['lbl-market', 'Ринок', 'Market'],
+  ['lbl-home-wl', 'Список', 'Watchlist'],
+  ['r-disclaimer', 'Не є фінансовою порадою.', 'Not financial advice.'],
+  ['lbl-sector', 'Сектор', 'Sector'],
+  ['lbl-risk', 'Ризик', 'Risk'],
+  ['lbl-trend', 'Тренд', 'Trend'],
+  ['lbl-for', 'Для кого', 'Best for'],
+  ['lbl-chart', 'Тренд (30д)', 'Trend (30d)'],
+  ['lbl-what', 'Що робить компанія', 'What the company does'],
+  ['lbl-risks', 'Головні ризики', 'Key risks'],
+  ['lbl-forecast', 'AI Прогноз', 'AI Forecast'],
+  ['lbl-conclusion', 'Висновок AI', 'AI Conclusion'],
+  ['wl-tab-wl', 'WL', 'WL'],
+  ['wl-tab-pf', '💼 Портфель', '💼 Portfolio'],
+  ['lbl-add-position', 'Додати позицію', 'Add position'],
+  ['pf-add-btn', '+ Додати', '+ Add'],
+  ['lbl-history-title', 'Історія пошуків', 'Search History'],
+  ['btn-clear', 'Очистити', 'Clear'],
+  ['lbl-alerts-title', 'Алерти цін', 'Price Alerts'],
+  ['lbl-notif', '🔔 Сповіщення', '🔔 Notifications'],
+  ['alerts-info', 'Отримуй сповіщення коли акції з Watchlist змінюються більше ніж на заданий %.', 'Get notified when Watchlist stocks change more than the set %.'],
+  ['threshold-label', 'Поріг сповіщення (% зміни):', 'Alert threshold (% change):'],
+  ['target-label', '🎯 Цінові цілі:', '🎯 Price targets:'],
+  ['btn-add-target', '+ Додати ціль', '+ Add target'],
+  ['btn-save-threshold', 'Зберегти', 'Save'],
+  ['btn-check-now', '↻ Перевірити', '↻ Check now'],
+  ['lbl-chat-ctx', 'Контекст:', 'Context:'],
+  ['lbl-chat-welcome', 'Привіт! Запитай мене про будь-яку акцію або ринок. Після аналізу — отримую контекст автоматично.', 'Hi! Ask me about any stock or market. After analysis, I get context automatically.'],
+  ['news-search-btn', 'Пошук', 'Search'],
+  ['lbl-news-empty', 'Введи тікер або вибери зі списку', 'Enter a ticker or pick from the list'],
+  ['stop-btn', '✕ Стоп', '✕ Stop'],
+  ['lbl-bmac', 'Підтримати проект', 'Support the project'],
+  ['lbl-currency', '💱 Валюта цін', '💱 Price currency'],
+  ['lbl-pin', '📌 Відкрити у вікні', '📌 Open in window'],
+  ['btn-pin-tab', '↗ Відкрити', '↗ Open'],
+  // placeholders
+  ['pf-ticker', 'TSLA', 'TSLA', 'placeholder'],
+  ['pf-shares', 'Акцій', 'Shares', 'placeholder'],
+  ['pf-buyprice', 'Ціна $', 'Buy price $', 'placeholder'],
+  ['chat-input', 'Запитай про TSLA, ринок...', 'Ask about TSLA, market...', 'placeholder'],
+  ['news-input', 'TSLA, AAPL...', 'TSLA, AAPL...', 'placeholder'],
+  // titles
+  ['btn-new-chat', 'Новий діалог', 'New chat', 'title'],
+  ['btn-conv-list', 'Діалоги', 'Conversations', 'title']
+];
+
 function applyLang() {
   var ua = lang === 'ua';
-  // Shows the CURRENT language (cousin's UX feedback) — click switches
-  document.getElementById('lang-btn').textContent = ua ? 'UA' : 'EN';
-  // Full words instead of WL/Hist. — accessibility feedback
-  document.getElementById('tab-search').textContent = ua ? 'Пошук' : 'Search';
-  document.getElementById('tab-watchlist').textContent = ua ? 'Список' : 'Watchlist';
-  document.getElementById('tab-history').textContent = ua ? 'Історія' : 'History';
-  document.getElementById('analyze-btn').textContent = ua ? 'Аналіз' : 'Analyze';
-  document.getElementById('lbl-popular').textContent = ua ? 'Популярні:' : 'Popular:';
-  document.getElementById('lbl-market').textContent = ua ? 'Ринок' : 'Market';
-  document.getElementById('r-disclaimer').textContent = ua ? 'Не є фінансовою порадою.' : 'Not financial advice.';
-  document.getElementById('lbl-sector').textContent = ua ? 'Сектор' : 'Sector';
-  document.getElementById('lbl-risk').textContent = ua ? 'Ризик' : 'Risk';
-  document.getElementById('lbl-trend').textContent = ua ? 'Тренд' : 'Trend';
-  document.getElementById('lbl-for').textContent = ua ? 'Для кого' : 'Best for';
-  document.getElementById('lbl-chart').textContent = ua ? 'Тренд (30д)' : 'Trend (30d)';
-  document.getElementById('lbl-what').textContent = ua ? 'Що робить компанія' : 'What the company does';
-  document.getElementById('lbl-risks').textContent = ua ? 'Головні ризики' : 'Key risks';
-  document.getElementById('lbl-forecast').textContent = ua ? 'AI Прогноз' : 'AI Forecast';
-  document.getElementById('lbl-conclusion').textContent = ua ? 'Висновок AI' : 'AI Conclusion';
-  // lbl-watchlist-title moved to wl-tab-wl
-  document.getElementById('wl-tab-wl').textContent = ua ? 'WL' : 'WL';
-  document.getElementById('wl-tab-pf').textContent = ua ? '💼 Портфель' : '💼 Portfolio';
-  document.getElementById('lbl-add-position').textContent = ua ? 'Додати позицію' : 'Add position';
-  document.getElementById('pf-ticker').placeholder = ua ? 'TSLA' : 'TSLA';
-  document.getElementById('pf-shares').placeholder = ua ? 'Акцій' : 'Shares';
-  document.getElementById('pf-buyprice').placeholder = ua ? 'Ціна $' : 'Buy price $';
-  document.getElementById('pf-add-btn').textContent = ua ? '+ Додати' : '+ Add';
-  document.getElementById('lbl-history-title').textContent = ua ? 'Історія пошуків' : 'Search History';
-  document.getElementById('btn-clear').textContent = ua ? 'Очистити' : 'Clear';
-  document.getElementById('lbl-alerts-title').textContent = ua ? 'Алерти цін' : 'Price Alerts';
-  document.getElementById('alerts-info').textContent = ua ? 'Отримуй сповіщення коли акції з Watchlist змінюються більше ніж на заданий %.' : 'Get notified when Watchlist stocks change more than the set %.';
-  document.getElementById('threshold-label').textContent = ua ? 'Поріг сповіщення (% зміни):' : 'Alert threshold (% change):';
-  document.getElementById('target-label').textContent = ua ? '🎯 Цінові цілі:' : '🎯 Price targets:';
-  document.getElementById('btn-add-target').textContent = ua ? '+ Додати ціль' : '+ Add target';
+
+  // Data-driven labels — one loop replaces ~45 repetitive getElementById lines.
+  // Each element is guarded, so a renamed/removed ID is skipped instead of
+  // throwing and breaking init.
+  for (var i = 0; i < I18N_LABELS.length; i++) {
+    var el = document.getElementById(I18N_LABELS[i][0]);
+    if (el) el[I18N_LABELS[i][3] || 'textContent'] = ua ? I18N_LABELS[i][1] : I18N_LABELS[i][2];
+  }
+
+  // ── Special cases (more than a plain ua/en text swap) ──
   var tdSel = document.getElementById('target-dir');
   tdSel.options[0].text = ua ? 'впаде нижче' : 'falls below';
   tdSel.options[1].text = ua ? 'зросте вище' : 'rises above';
-  document.getElementById('btn-save-threshold').textContent = ua ? 'Зберегти' : 'Save';
-  document.getElementById('btn-check-now').textContent = ua ? '↻ Перевірити' : '↻ Check now';
-  document.getElementById('lbl-chat-ctx').textContent = ua ? 'Контекст:' : 'Context:';
-  var welcomeEl = document.getElementById('lbl-chat-welcome');
-  if (welcomeEl) welcomeEl.textContent = ua
-    ? 'Привіт! Запитай мене про будь-яку акцію або ринок. Після аналізу — отримую контекст автоматично.'
-    : 'Hi! Ask me about any stock or market. After analysis, I get context automatically.';
-  document.getElementById('chat-input').placeholder = ua ? 'Запитай про TSLA, ринок...' : 'Ask about TSLA, market...';
-  document.getElementById('btn-new-chat').title = ua ? 'Новий діалог' : 'New chat';
-  document.getElementById('btn-conv-list').title = ua ? 'Діалоги' : 'Conversations';
+
   // Update conv title if it's a default one
   var titleEl = document.getElementById('chat-conv-title');
   if (titleEl.textContent === 'Новий діалог' || titleEl.textContent === 'New chat') {
@@ -274,21 +297,9 @@ function applyLang() {
   }
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
-  document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.0 · Groq Llama 3.3 · Finnhub';
-  var lblBmac = document.getElementById('lbl-bmac');
-  if (lblBmac) lblBmac.textContent = ua ? 'Підтримати проект' : 'Support the project';
-  var lblCurrency = document.getElementById('lbl-currency');
-  if (lblCurrency) lblCurrency.textContent = ua ? '💱 Валюта цін' : '💱 Price currency';
-  var lblPin = document.getElementById('lbl-pin');
-  if (lblPin) lblPin.textContent = ua ? '📌 Відкрити у вікні' : '📌 Open in window';
-  var btnPin = document.getElementById('btn-pin-tab');
-  if (btnPin) btnPin.textContent = ua ? '↗ Відкрити' : '↗ Open';
-  document.getElementById('news-search-btn').textContent = ua ? 'Пошук' : 'Search';
-  document.getElementById('news-input').placeholder = ua ? 'TSLA, AAPL...' : 'TSLA, AAPL...';
-  var newsEmptyEl = document.getElementById('lbl-news-empty');
-  if (newsEmptyEl) newsEmptyEl.textContent = ua ? 'Введи тікер або вибери зі списку' : 'Enter a ticker or pick from the list';
-  var stopBtn = document.getElementById('stop-btn');
-  if (stopBtn) stopBtn.textContent = ua ? '✕ Стоп' : '✕ Stop';
+  document.getElementById('settings-version').textContent = 'AI Stock Analyzer v2.2 · Groq Llama 3.3 · Finnhub';
+
+  // Theme labels depend on BOTH theme and language
   var lblTheme = document.getElementById('lbl-theme');
   if (lblTheme) lblTheme.textContent = theme === 'light'
     ? (ua ? '☀️ Світла тема' : '☀️ Light theme')
