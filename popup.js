@@ -88,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
       save({ lang: lang });
       applyLang();
       renderWatchlist();
+      // Portfolio renders its own labels (акцій/shares, Сьогодні/Today) — must
+      // re-render too, or it stays in the old language while static labels switch
+      if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
       renderHistory();
       initAlerts(); // re-render price targets + last prices in the new language
       if (currentTicker) runAnalysis();
