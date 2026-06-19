@@ -8,3 +8,6 @@ ROADMAP.md
 tests/
 .claude/
 make_icons.py
+_*.ps1
+_*.py
+_*.txt
