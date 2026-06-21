@@ -160,7 +160,7 @@ export default {
         return res;
       }
       if (url.pathname === '/analyze' && request.method === 'POST') {
-        return await handleAnalyze(request, env);
+        return await handleAnalyze(request, env, ctx);
       }
       if (url.pathname === '/chat' && request.method === 'POST') {
         return await handleChat(request, env);
@@ -345,7 +345,7 @@ const NAME_TO_TICKER = {
 const CYRILLIC_NAMES = {
   'ТЕСЛА':'TSLA','НВІДІА':'NVDA','НВИДИА':'NVDA','ІНТЕЛ':'INTC','ИНТЕЛ':'INTC',
   'ЕПЛ':'AAPL','ЕППЛ':'AAPL','ЯБЛУКО':'AAPL','МАЙКРОСОФТ':'MSFT','АМАЗОН':'AMZN',
-  'ГУГЛ':'GOOGL','ГУГЛ':'GOOGL','МЕТА':'META','ФЕЙСБУК':'META','НЕТФЛІКС':'NFLX',
+  'ГУГЛ':'GOOGL','МЕТА':'META','ФЕЙСБУК':'META','НЕТФЛІКС':'NFLX',
   'НЕТФЛИКС':'NFLX','ДІСНЕЙ':'DIS','БІТКОЇН':'BTC','БІТКОІН':'BTC','БИТКОИН':'BTC',
   'ЕФІР':'ETH','ЕФІРІУМ':'ETH','ЕФИР':'ETH','СОЛАНА':'SOL','КАРДАНО':'ADA',
   'ДОДЖ':'DOGE','РІПЛ':'XRP','РИПЛ':'XRP',
@@ -432,9 +432,24 @@ async function handlePrice(request, env) {
 }
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
-async function handleAnalyze(request, env, _retried) {
+async function handleAnalyze(request, env, ctx) {
   const { ticker, lang } = await request.json();
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
+
+  // Edge cache: the AI verdict for a given ticker+lang is identical for everyone
+  // for ~30 min. First user pays the 30-65s Groq cost; every later user with the
+  // same ticker gets the result straight from Cloudflare's edge in ~50ms — and
+  // the shared free Groq key is hit ONCE per ticker, not once per user (this is
+  // the scaling guard: 100 people analyzing AAPL = 1 Groq call, not 100).
+  // Synthetic GET key (POST bodies aren't auto-cached); only successful results
+  // are stored, so a transient error is never cached.
+  const cache = caches.default;
+  const cacheKeyUrl = new URL(request.url);
+  cacheKeyUrl.search = '?k=' + encodeURIComponent(
+    ticker.toUpperCase().trim() + '_' + (lang === 'ua' ? 'ua' : 'en'));
+  const cacheKey = new Request(cacheKeyUrl.toString());
+  const cacheHit = await cache.match(cacheKey);
+  if (cacheHit) return cacheHit;
 
   let raw = ticker.toUpperCase().trim();
   // Company NAME in the search box? ("INTEL", "FERRARI", "интел") —
@@ -550,13 +565,20 @@ Return ONLY this JSON structure:
   } catch (e) {
     return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
   }
-  return json({
+  const resp = json({
     ...analysis,
     _quote: quote,
     _ticker: t, // resolved symbol — client may have typed a company name
     _country: profile.country || null,
     _name: profile.name || null,
   });
+  // Only successful analyses reach here → safe to store on the edge for 30 min.
+  // Client always refetches a live /price on top, so a slightly stale _quote in
+  // the cached blob never shows as the displayed price.
+  const cacheable = new Response(resp.body, resp);
+  cacheable.headers.set('Cache-Control', 'public, max-age=1800');
+  if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+  return cacheable;
 }
 
 // ── /news?ticker=TSLA ────────────────────────────────────────────────────────
