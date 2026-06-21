@@ -103,9 +103,10 @@ function runAnalysis() {
         // lookup misses and the box stays empty
         var realT = data._ticker || raw;
         currentTicker = realT;
-        // Seed price cache from _quote (fresh, just fetched by /analyze)
-        // so fetchFreshPrice doesn't make a redundant /price call
-        if (data._quote && data._quote.c > 0) cacheSet('price_' + realT, data._quote);
+        // Always refetch a live /price here. The /analyze blob may be served from
+        // the worker's 30-min edge cache, so its _quote can be up to 30 min stale —
+        // seeding the price cache from it would show a stale price. _quote still
+        // rides along as fetchFreshPrice's fallback if the live /price call fails.
         fetchFreshPrice(realT, data);
         finish(realT, normalizeAI(data));
       })
