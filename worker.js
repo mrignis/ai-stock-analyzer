@@ -444,9 +444,15 @@ async function handleAnalyze(request, env, ctx) {
   // Synthetic GET key (POST bodies aren't auto-cached); only successful results
   // are stored, so a transient error is never cached.
   const cache = caches.default;
+  // Normalize known name aliases so "APPLE"/"AAPL" and "BITCOIN"/"BTC" share one
+  // cache slot — both resolve to the same analysis anyway. Free static lookups
+  // (no network), so this just lifts the hit rate for the popular names. (Unknown
+  // names like "FERRARI"→RACE still resolve via the registry below and key on the
+  // raw input — merging those would need a network probe on the hot path.)
+  const rawKey = ticker.toUpperCase().trim();
+  const keyTicker = CRYPTO_NAMES[rawKey] || NAME_TO_TICKER[rawKey] || rawKey;
   const cacheKeyUrl = new URL(request.url);
-  cacheKeyUrl.search = '?k=' + encodeURIComponent(
-    ticker.toUpperCase().trim() + '_' + (lang === 'ua' ? 'ua' : 'en'));
+  cacheKeyUrl.search = '?k=' + encodeURIComponent(keyTicker + '_' + (lang === 'ua' ? 'ua' : 'en'));
   const cacheKey = new Request(cacheKeyUrl.toString());
   const cacheHit = await cache.match(cacheKey);
   if (cacheHit) return cacheHit;
@@ -577,7 +583,8 @@ Return ONLY this JSON structure:
   // the cached blob never shows as the displayed price.
   const cacheable = new Response(resp.body, resp);
   cacheable.headers.set('Cache-Control', 'public, max-age=1800');
-  if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+  if (ctx && ctx.waitUntil) ctx.waitUntil(
+    cache.put(cacheKey, cacheable.clone()).catch(e => console.error('analyze cache put failed:', e)));
   return cacheable;
 }
 
