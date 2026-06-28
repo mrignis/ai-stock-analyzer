@@ -101,9 +101,10 @@ function renderHomeWatchlist() {
   var itemsEl = document.getElementById('home-wl-items');
   if (!watchlist.length) { container.style.display = 'none'; return; }
   container.style.display = 'block';
-  // Show more of the user's curated list (was 4) so home fills the gap —
-  // the watchlist IS the chosen set, so add/remove there controls home
-  var shown = watchlist.slice(0, 6);
+  // User picks which stocks show on home by starring them in the watchlist
+  // (w.home). If none are starred, fall back to the first 6 (prior behaviour).
+  var pinned = watchlist.filter(function(w) { return w.home; });
+  var shown = (pinned.length ? pinned : watchlist).slice(0, 6);
   var html = '';
   shown.forEach(function(w) {
     var pill = pillClass(w.color);
@@ -171,7 +172,11 @@ function renderWatchlist() {
   for (var i = 0; i < watchlist.length; i++) {
     var w = watchlist[i];
     var pill = pillClass(w.color);
+    var star = w.home ? '★' : '☆';
+    var starTitle = lang === 'ua' ? 'Показувати на головній' : 'Show on home screen';
     html += '<div class="watch-item" data-ticker="' + w.ticker + '">' +
+      '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
+        'style="background:none;border:none;cursor:pointer;font-size:14px;padding:0 4px;color:' + (w.home ? 'var(--green)' : 'var(--dim)') + '">' + star + '</button>' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
       '<div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div>' +
       '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
@@ -185,9 +190,19 @@ function renderWatchlist() {
   var items = el.querySelectorAll('.watch-item');
   for (var i = 0; i < items.length; i++) {
     items[i].addEventListener('click', function(e) {
-      if (e.target.classList.contains('watch-remove')) return;
+      if (e.target.classList.contains('watch-remove') || e.target.classList.contains('watch-star')) return;
       document.getElementById('ticker-input').value = this.getAttribute('data-ticker');
       showPanel('search'); runAnalysis();
+    });
+  }
+  // Star toggles "show on home" for that ticker
+  var stars = el.querySelectorAll('.watch-star');
+  for (var i = 0; i < stars.length; i++) {
+    stars[i].addEventListener('click', function(e) {
+      e.stopPropagation();
+      var t = this.getAttribute('data-ticker');
+      watchlist.forEach(function(w) { if (w.ticker === t) w.home = !w.home; });
+      save({ watchlist: watchlist }); renderWatchlist();
     });
   }
   var removes = el.querySelectorAll('.watch-remove');
