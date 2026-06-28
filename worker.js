@@ -320,15 +320,24 @@ async function resolveTickerByName(text) {
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     const d = await r.json();
+    // Keep real equities/ETFs incl. foreign exchanges (SAU.TO, GMIN.TO). Only
+    // drop index (^) and FX (=X) pseudo-symbols — the old "no dot" filter wrongly
+    // killed every Canadian/London listing (Pylyp: SAU, GMIN not found).
     const quotes = (d.quotes || []).filter(q =>
-      q.symbol && (q.score || 0) > 10000 && !q.symbol.includes('.'));
+      q.symbol && (q.score || 0) > 10000 &&
+      !q.symbol.startsWith('^') && !q.symbol.includes('=') &&
+      ['EQUITY', 'ETF'].includes(q.quoteType || 'EQUITY'));
     if (!quotes.length) return null;
     const Q = text.trim().toUpperCase();
     const starts = s => (s || '').toUpperCase().startsWith(Q);
+    // A bare-ticker query ("SAU") should match its exchange-suffixed listing
+    // ("SAU.TO") too — compare the part before the dot.
+    const base = s => (s || '').toUpperCase().split('.')[0];
     const hit = quotes.find(q =>
-      q.symbol.toUpperCase() === Q || starts(q.longname) || starts(q.shortname));
-    if (hit) return { sym: hit.symbol };
-    return { candidates: quotes.map(q => q.symbol + ' (' + (q.longname || q.shortname || '?') + ')') };
+      base(q.symbol) === Q || starts(q.longname) || starts(q.shortname));
+    const nameOf = q => q.longname || q.shortname || null;
+    if (hit) return { sym: hit.symbol, name: nameOf(hit) };
+    return { candidates: quotes.map(q => q.symbol + ' (' + (nameOf(q) || '?') + ')') };
   } catch { /* registry is optional — detection just stays empty */ }
   return null;
 }
@@ -366,10 +375,24 @@ async function yahooQuote(symbol) {
     const c  = meta.regularMarketPrice || meta.previousClose || 0;
     const pc = meta.previousClose || meta.chartPreviousClose || c;
     if (!c || c <= 0) return null;
-    return { c, pc };
+    // name/currency come free in the chart meta — used to resolve foreign tickers
+    return { c, pc, name: meta.longName || meta.shortName || null, currency: meta.currency || null };
   } catch {
     return null;
   }
+}
+
+// Bare ticker on a foreign exchange? Finnhub free is US-only, and Yahoo SEARCH
+// misses small caps ("SAU" surfaces "Saudi…", not St Augustine). A direct chart
+// probe across exchange suffixes is reliable: SAU → SAU.TO ($0.17 CAD). Parallel
+// so the worst case is one timeout, not five. (Pylyp: SAU/GMIN not found.)
+const YAHOO_EXCHANGE_SUFFIXES = ['.TO', '.V', '.L', '.AX', '.NE', '.NS'];
+async function probeForeignExchange(ticker) {
+  const hits = await Promise.all(YAHOO_EXCHANGE_SUFFIXES.map(async suf => {
+    const q = await yahooQuote(ticker + suf);
+    return q && q.c > 0 ? { sym: ticker + suf, name: q.name } : null;
+  }));
+  return hits.find(Boolean) || null;
 }
 
 // Yahoo symbols for market cards (Finnhub uses BINANCE:BTCUSDT, Yahoo uses BTC-USD)
@@ -458,21 +481,29 @@ async function handleAnalyze(request, env, ctx) {
   if (cacheHit) return cacheHit;
 
   let raw = ticker.toUpperCase().trim();
-  // Company NAME in the search box? ("INTEL", "FERRARI", "интел") —
-  // resolve via Yahoo's registry so users can find any firm (tester request).
-  // One cheap quote probe decides: real ticker -> proceed; otherwise ask the
-  // registry ONCE before the expensive pipeline (no double Groq runs).
-  // Known crypto NEVER goes to the registry — a flaky Finnhub probe must not
-  // turn BTC into "Did you mean BTC-USD?" (regression caught by Pylyp)
+  let resolvedName = null; // company name from Yahoo (for foreign/TSX stocks Finnhub lacks)
+  // Well-known names → ticker instantly, no network (INTEL→INTC, MICROSOFT→MSFT)
+  raw = NAME_TO_TICKER[raw] || raw;
+  // Resolve unknown symbols. One cheap Finnhub probe decides: real US ticker →
+  // proceed; otherwise (a) bare ticker → probe foreign exchanges (SAU→SAU.TO),
+  // (b) company name → Yahoo name search (FERRARI→RACE). Known crypto skips all
+  // this — a flaky probe must not turn BTC into "Did you mean BTC-USD?" (Pylyp).
   if (!CRYPTO_MAP[CRYPTO_NAMES[raw] || raw]) {
     const probe = await finnhubQuote(env, CRYPTO_NAMES[raw] || raw);
     if (!probe || !probe.c || probe.c === 0) {
-      const resolved = await resolveTickerByName(raw);
-      if (resolved && resolved.sym && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.sym.toUpperCase())) {
-        raw = resolved.sym.toUpperCase();
-      } else if (resolved && resolved.candidates) {
-        return json({ error: (lang === 'ua' ? 'Можливо, ви мали на увазі: ' : 'Did you mean: ') +
-          resolved.candidates.join(', ') + '?' }, 404);
+      const isBareTicker = /^[A-Z0-9]{1,6}$/.test(raw);
+      const fx = isBareTicker ? await probeForeignExchange(raw) : null;
+      if (fx) {
+        raw = fx.sym; resolvedName = fx.name || null;
+      } else {
+        const resolved = await resolveTickerByName(raw);
+        if (resolved && resolved.sym && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.sym.toUpperCase())) {
+          raw = resolved.sym.toUpperCase();
+          resolvedName = resolved.name || null;
+        } else if (resolved && resolved.candidates) {
+          return json({ error: (lang === 'ua' ? 'Можливо, ви мали на увазі: ' : 'Did you mean: ') +
+            resolved.candidates.join(', ') + '?' }, 404);
+        }
       }
     }
   }
@@ -527,10 +558,15 @@ async function handleAnalyze(request, env, ctx) {
     ? newsRaw.slice(0, 5).map(n => `- ${n.headline}`).join('\n')
     : '';
   const m = metrics.metric || {};
+  // Foreign/TSX stocks have no Finnhub profile — use the Yahoo registry name so
+  // the AI sees the REAL company, not just the ticker (no profile = no metrics,
+  // so the prompt below tells it to stay honest instead of inventing facts).
+  const companyName = profile.name || resolvedName || t;
+  const thinData = !profile.name;
 
   const context = `
 Stock ticker: ${t}
-Company: ${profile.name || t}
+Company: ${companyName}
 Industry: ${profile.finnhubIndustry || 'Unknown'} | Country: ${profile.country || 'N/A'}
 Current price: $${quote.c || 'N/A'} | Prev close: $${quote.pc || 'N/A'} | Daily change: ${quote.dp != null ? quote.dp.toFixed(2) + '%' : 'N/A'}
 Market cap: ${profile.marketCapitalization ? '$' + (profile.marketCapitalization / 1000).toFixed(1) + 'B' : 'N/A'}
@@ -547,6 +583,7 @@ ${news || 'No recent news available'}`.trim();
 
 ${context}
 
+${thinData ? 'NOTE: Only the company name and live price are confirmed for this stock — no profile/financials were available. In "what" and "risks" use ONLY what you genuinely know about this exact company; if you are not sure what it does, say so plainly instead of inventing a business, products, or figures. Never fabricate.' : ''}
 ${ua ? 'IMPORTANT: Respond ENTIRELY in Ukrainian language using only Cyrillic characters. Never mix in Chinese, Japanese, or any other non-Cyrillic script.' : 'Respond in English only.'}
 Return ONLY this JSON structure:
 {"sector":"...","risk":"${ua ? 'Високий або Середній або Низький' : 'High or Medium or Low'}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${ua ? 'одне слово: Купувати або Тримати або Продавати' : 'one word: Buy or Hold or Sell'}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
@@ -575,8 +612,8 @@ Return ONLY this JSON structure:
     ...analysis,
     _quote: quote,
     _ticker: t, // resolved symbol — client may have typed a company name
+    _name: companyName,
     _country: profile.country || null,
-    _name: profile.name || null,
   });
   // Only successful analyses reach here → safe to store on the edge for 30 min.
   // Client always refetches a live /price on top, so a slightly stale _quote in
