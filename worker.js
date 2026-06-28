@@ -307,6 +307,24 @@ async function fetchCompanyInfo(env, t) {
   return parts.join(' ');
 }
 
+// Short Wikipedia intro for a company name — gives the AI real background for
+// foreign/TSX stocks Finnhub has no profile for (else it says "unknown activity"
+// even for an obviously-named miner). Returns '' on any miss.
+async function wikiSummary(name) {
+  if (!name) return '';
+  const stripped = name.replace(/[,.]?\s+(Inc|Corp|Corporation|Ltd|Limited|PLC|Co|NV|SA|Class [A-C])\.?$/i, '').trim();
+  for (const title of [...new Set([name, stripped])]) {
+    try {
+      const w = await fetchT('https://en.wikipedia.org/api/rest_v1/page/summary/' +
+        encodeURIComponent(title), { headers: { 'User-Agent': 'stock-ai-analyzer/1.0' } });
+      if (!w.ok) continue;
+      const wd = await w.json();
+      if (wd.extract && wd.type !== 'disambiguation') return wd.extract.slice(0, 700);
+    } catch { /* optional */ }
+  }
+  return '';
+}
+
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
 // "servicenow" → NOW. Noise queries return empty — safe to call with raw text.
 // Hybrid resolver (team vote, fixes "intell"→BOTZ): exact/prefix match gives
@@ -563,6 +581,9 @@ async function handleAnalyze(request, env, ctx) {
   // so the prompt below tells it to stay honest instead of inventing facts).
   const companyName = profile.name || resolvedName || t;
   const thinData = !profile.name;
+  // Foreign/TSX stock with no Finnhub profile → pull Wikipedia background so the
+  // AI can describe the real business (a named miner shouldn't read "unknown").
+  const wiki = thinData ? await wikiSummary(companyName) : '';
 
   const context = `
 Stock ticker: ${t}
@@ -574,7 +595,7 @@ P/E ratio: ${m['peNormalizedAnnual'] || m['peTTM'] || 'N/A'}
 52-week high: $${m['52WeekHigh'] || 'N/A'} | 52-week low: $${m['52WeekLow'] || 'N/A'}
 ROE (TTM): ${m['roeTTM'] != null ? m['roeTTM'].toFixed(1) + '%' : 'N/A'}
 Revenue growth YoY: ${m['revenueGrowthTTMYoy'] != null ? m['revenueGrowthTTMYoy'].toFixed(1) + '%' : 'N/A'}
-Recent news (last 7 days):
+${wiki ? 'Wikipedia background: ' + wiki + '\n' : ''}Recent news (last 7 days):
 ${news || 'No recent news available'}`.trim();
 
   const ua = lang === 'ua';
@@ -583,7 +604,7 @@ ${news || 'No recent news available'}`.trim();
 
 ${context}
 
-${thinData ? 'NOTE: Only the company name and live price are confirmed for this stock — no profile/financials were available. In "what" and "risks" use ONLY what you genuinely know about this exact company; if you are not sure what it does, say so plainly instead of inventing a business, products, or figures. Never fabricate.' : ''}
+${thinData ? 'NOTE: No financial profile was available — only the company name, live price, and the Wikipedia background above (if any). Describe what the company does using the Wikipedia text and the company name itself (e.g. "X Mining Corp" is clearly a mining company — say so, do not write "unknown activity"). You MAY use well-known general knowledge about the company. Do NOT invent specific figures (revenue, market cap, partnerships, dates) you are not sure of. Only if you truly do not recognise the company at all, say its details are limited.' : ''}
 ${ua ? 'IMPORTANT: Respond ENTIRELY in Ukrainian language using only Cyrillic characters. Never mix in Chinese, Japanese, or any other non-Cyrillic script.' : 'Respond in English only.'}
 Return ONLY this JSON structure:
 {"sector":"...","risk":"${ua ? 'Високий або Середній або Низький' : 'High or Medium or Low'}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${ua ? 'одне слово: Купувати або Тримати або Продавати' : 'one word: Buy or Hold or Sell'}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
