@@ -889,6 +889,7 @@ async function handleChat(request, env) {
   let liveData = '';
   let companyInfo = '';
   let priceHistory = '';
+  let webAnswer = '';
   if (potentialTickers.length > 0) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
@@ -902,12 +903,18 @@ async function handleChat(request, env) {
     // Deep info follows the first ticker WITH a live price — "firm" (no price)
     // must not steal it from the Intel being discussed
     const primary = results.find(r => r.d && r.d.c > 0);
-    // Profile/news and recent daily closes fetched together for the primary ticker.
-    // primary.name (Yahoo) lets fetchCompanyInfo fall back to Wikipedia for foreign
-    // listings Finnhub has no profile for.
-    const [info, history] = primary
-      ? await Promise.all([fetchCompanyInfo(env, primary.ticker, primary.name), fetchRecentCloses(primary.ticker)])
-      : ['', ''];
+    // Profile/news, recent daily closes, AND a web search keyed on the user's
+    // actual question — all in parallel. The question-aware search is what lets
+    // chat answer specifics the static profile lacks (CEO/management, latest
+    // developments) instead of "not in my data" (Pylyp: Groq direct gave more).
+    const primaryName = primary ? (primary.name || primary.ticker) : '';
+    const [info, history, webAns] = primary
+      ? await Promise.all([
+          fetchCompanyInfo(env, primary.ticker, primary.name),
+          fetchRecentCloses(primary.ticker),
+          webSearch(env, (primaryName + ' ' + lastMsg).slice(0, 200), 3),
+        ])
+      : ['', '', ''];
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
       .map(r => {
@@ -917,6 +924,7 @@ async function handleChat(request, env) {
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
     companyInfo = info;
     priceHistory = history;
+    webAnswer = webAns;
   }
 
   const system = [
@@ -929,6 +937,7 @@ async function handleChat(request, env) {
     priceHistory,
     priceHistory ? 'For questions about past prices ("2 days ago", "last week", "yesterday"), use the recent daily closing prices above — count back from today. Give the actual dated price, do NOT say you lack historical data.' : '',
     companyInfo,
+    webAnswer ? 'Live web search results for the user\'s current question (fetched just now — use these for specifics the profile lacks: executives/CEO and management, latest developments, projects, deals; quote concrete facts from here): ' + webAnswer : '',
     candidateNote,
     companyInfo ? 'Use the company profile, background (Wikipedia or web search), and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
