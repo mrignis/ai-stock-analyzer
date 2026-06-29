@@ -199,7 +199,9 @@ async function fetchT(url, opts = {}, ms = 4000) {
 function parseTicker(request) {
   const raw = (new URL(request.url).searchParams.get('ticker') || '').toUpperCase();
   if (!raw) return null;
-  const t = CRYPTO_NAMES[raw] || raw;
+  // Same name→ticker normalization /analyze does (INTEL→INTC, MICROSOFT→MSFT),
+  // so /price answers a typed company name instead of a dead 0.
+  const t = CRYPTO_NAMES[raw] || NAME_TO_TICKER[raw] || raw;
   return { t, isCrypto: !!CRYPTO_MAP[t] };
 }
 
@@ -408,7 +410,7 @@ const YAHOO_EXCHANGE_SUFFIXES = ['.TO', '.V', '.L', '.AX', '.NE', '.NS'];
 async function probeForeignExchange(ticker) {
   const hits = await Promise.all(YAHOO_EXCHANGE_SUFFIXES.map(async suf => {
     const q = await yahooQuote(ticker + suf);
-    return q && q.c > 0 ? { sym: ticker + suf, name: q.name } : null;
+    return q && q.c > 0 ? { sym: ticker + suf, name: q.name, q: q } : null;
   }));
   return hits.find(Boolean) || null;
 }
@@ -468,6 +470,16 @@ async function handlePrice(request, env) {
   // Finnhub failed or returned zero — fallback to Yahoo Finance
   const yahooData = await yahooQuote(isCrypto ? t + '-USD' : t);
   if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: pctChange(yahooData.c, yahooData.pc) });
+
+  // Still nothing — a bare ticker may be a foreign/TSX listing (SAU → SAU.TO).
+  // Same exchange probe /analyze uses, so a watchlist tile shows a live price
+  // even when the user never ran a full analysis. Only fires after the cheap US
+  // lookups miss, so normal tickers pay nothing. _ticker tells the client the
+  // resolved symbol. Skipped for crypto and long/junk inputs.
+  if (!isCrypto && /^[A-Z0-9]{1,6}$/.test(t)) {
+    const fx = await probeForeignExchange(t);
+    if (fx && fx.q) return json({ c: fx.q.c, pc: fx.q.pc, dp: pctChange(fx.q.c, fx.q.pc), _ticker: fx.sym });
+  }
 
   return json(finnhubData || {}); // return whatever Finnhub gave (may be empty)
 }
