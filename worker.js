@@ -883,6 +883,15 @@ async function handleChat(request, env) {
     }
   }
 
+  // The analysis context (e.g. "BTE" from analyzing Baytex) is the subject of
+  // follow-ups that name no ticker — "who is the CEO?", "хто директор в цій фірмі".
+  // Seed it as a safety net so those still pull live data + a web search, instead
+  // of the model asking "which company?" (Pylyp). Last in priority, never blocks.
+  if (context) {
+    const ctxT = (String(context).split(/[:\s,]/)[0] || '').toUpperCase();
+    if (/^[A-Z0-9.\-]{1,8}$/.test(ctxT)) convTickers.push(ctxT);
+  }
+
   // Conversation tickers are the safety net, never the blocker
   const potentialTickers = [...new Set(lastTickers.concat(convTickers))].slice(0, 3);
 
