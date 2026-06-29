@@ -154,7 +154,7 @@ function updateWatchBtn() {
   var btn = document.getElementById('watch-btn');
   if (!currentTicker) return;
   if (isInWatch(currentTicker)) { btn.textContent = lang === 'ua' ? '✓ В списку' : '✓ Added'; btn.classList.add('added'); }
-  else { btn.textContent = '+ Watchlist'; btn.classList.remove('added'); }
+  else { btn.textContent = lang === 'ua' ? '+ Список' : '+ Watchlist'; btn.classList.remove('added'); }
 }
 function toggleWatch() {
   if (!currentTicker || !currentData) return;
@@ -165,7 +165,7 @@ function toggleWatch() {
 function renderWatchlist() {
   var el = document.getElementById('watchlist-content');
   if (!watchlist.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Watchlist порожній.' : 'Watchlist is empty.') + '</p></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Список порожній.' : 'Watchlist is empty.') + '</p></div>';
     return;
   }
   var html = '';

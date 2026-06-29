@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
       applyLang();
       renderWatchlist();
       renderHomeWatchlist(); // home "Список" verdicts/labels must switch language too
+      updateWatchBtn();      // "+ Список" / "✓ В списку" button text follows the language
       // Portfolio renders its own labels (акцій/shares, Сьогодні/Today) — must
       // re-render too, or it stays in the old language while static labels switch
       if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
@@ -254,7 +255,7 @@ var I18N_LABELS = [
   ['btn-clear', 'Очистити', 'Clear'],
   ['lbl-alerts-title', 'Алерти цін', 'Price Alerts'],
   ['lbl-notif', '🔔 Сповіщення', '🔔 Notifications'],
-  ['alerts-info', 'Отримуй сповіщення коли акції з Watchlist змінюються більше ніж на заданий %.', 'Get notified when Watchlist stocks change more than the set %.'],
+  ['alerts-info', 'Отримуй сповіщення коли акції зі Списку змінюються більше ніж на заданий %.', 'Get notified when Watchlist stocks change more than the set %.'],
   ['threshold-label', 'Поріг сповіщення (% зміни):', 'Alert threshold (% change):'],
   ['target-label', '🎯 Цінові цілі:', '🎯 Price targets:'],
   ['btn-add-target', '+ Додати ціль', '+ Add target'],
