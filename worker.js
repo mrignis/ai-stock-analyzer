@@ -94,6 +94,19 @@ async function aiRequest(env, model, messages, temperature, maxTokens, timeoutMs
   return text;
 }
 
+// Map an AI engine failure to a clean HTTP response. The shared free Groq key
+// throttles under concurrent load — surfacing that as a friendly 429 "busy, try
+// again" beats a scary 500 (stress test: bursts hit Groq's own rate limit).
+function aiErrorResponse(e, ua) {
+  const m = (e && e.message) || '';
+  if (/rate.?limit|quota|overload|перевантаж|timeout|таймаут|429|503|504|502|try again|спробуй/i.test(m)) {
+    return json({ error: ua
+      ? '⏳ Сервіс зараз завантажений. Спробуй ще раз за хвилину.'
+      : '⏳ The service is busy right now. Please try again in a minute.' }, 429);
+  }
+  return json({ error: m || (ua ? 'Помилка' : 'Error') }, 500);
+}
+
 // ── Rate limiting (abuse protection, cousin's security feedback) ──────────────
 // In-memory per-isolate counter: not perfectly global, but stops bursts and
 // script abuse without paid infrastructure. AI endpoints are the expensive ones.
@@ -205,6 +218,10 @@ async function fetchT(url, opts = {}, ms = 4000) {
 function parseTicker(request) {
   const raw = (new URL(request.url).searchParams.get('ticker') || '').toUpperCase();
   if (!raw) return null;
+  // Reject junk early (200-char strings, <script>, spaces) before any upstream
+  // fetch or the 6-exchange foreign probe — saves work and blocks query-string
+  // abuse. Real tickers/names are short and [A-Z0-9.-] only.
+  if (raw.length > 15 || !/^[A-Z0-9.\-]+$/.test(raw)) return null;
   // Same name→ticker normalization /analyze does (INTEL→INTC, MICROSOFT→MSFT),
   // so /price answers a typed company name instead of a dead 0.
   const t = CRYPTO_NAMES[raw] || NAME_TO_TICKER[raw] || raw;
@@ -746,7 +763,7 @@ Return ONLY this JSON structure:
       { role: 'user', content: userPrompt },
     ], 0.3, 1024);
   } catch (e) {
-    return json({ error: e.message }, 500);
+    return aiErrorResponse(e, ua);
   }
 
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
@@ -1038,7 +1055,7 @@ async function handleChat(request, env) {
   try {
     reply = await callAI(env, aiMessages, 0.7, 800);
   } catch (e) {
-    return json({ error: e.message }, 500);
+    return aiErrorResponse(e, ua);
   }
 
   return json({ reply });
