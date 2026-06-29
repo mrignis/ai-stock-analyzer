@@ -1,6 +1,7 @@
 // AI Stock Analyzer — Cloudflare Worker
 // Deploy: wrangler deploy
-// Secrets: wrangler secret put OLLAMA_API_KEY
+// Secrets: wrangler secret put GROQ_KEY       (chat/analyze engine)
+//          wrangler secret put OLLAMA_API_KEY  (company web search only)
 //          wrangler secret put FINNHUB_KEY
 
 const CORS = {
@@ -9,12 +10,13 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// AI engine: Ollama Cloud (OpenAI-compatible endpoint, same response shape as
-// Groq used to return). qwen3-coder:480b is the smart primary (~2-3s); when it
-// times out or errors we fall back to the faster qwen3-coder-next. Both run on
-// the free Ollama Cloud tier (general qwen3.5 needs a paid subscription).
-const AI_MODEL = 'qwen3-coder:480b-cloud';
-const AI_URL = 'https://ollama.com/v1/chat/completions';
+// AI engine: Groq (OpenAI-compatible). Llama 3.3 70B is the smart primary; on
+// timeout/overload we fall back to the faster 8B-instant so the user always gets
+// an answer at peak hours. (Reverted from qwen/Ollama Cloud — qwen3-coder gave
+// thinner prose + cold-start timeouts; the company web_search below still uses
+// OLLAMA_API_KEY independently of the chat/analyze engine.)
+const AI_MODEL = 'llama-3.3-70b-versatile';
+const AI_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const CRYPTO_MAP = {
   'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
@@ -34,15 +36,15 @@ const CRYPTO_NAMES = {
   'TRON': 'TRX',
 };
 
-const AI_FALLBACK_MODEL = 'qwen3-coder-next'; // backup engine: smaller, faster, same free tier
+const AI_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but never queued
 
 async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
-  // Primary engine (qwen3-coder:480b, 30s) → on timeout/overload retry with the
-  // fast fallback (qwen3-coder-next, 15s). User always gets an answer at peak hours.
+  // Primary engine (Llama 3.3 70B, 20s) → on timeout/overload retry with the
+  // fast fallback (8B-instant, 12s). User always gets an answer at peak hours.
   try {
-    return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 30000);
+    return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 20000);
   } catch (e) {
-    return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 15000);
+    return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
   }
 }
 
@@ -56,7 +58,7 @@ async function aiRequest(env, model, messages, temperature, maxTokens, timeoutMs
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + env.OLLAMA_API_KEY,
+        'Authorization': 'Bearer ' + env.GROQ_KEY,
       },
       body: JSON.stringify({
         model,
@@ -280,11 +282,12 @@ async function fetchRecentCloses(t) {
 async function fetchCompanyInfo(env, t, fallbackName, question) {
   if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
 
-  const [profile, news] = await Promise.all([
+  const [profile, news, yahoo] = await Promise.all([
     fetchT(`https://finnhub.io/api/v1/stock/profile2?symbol=${t}&token=${env.FINNHUB_KEY}`)
       .then(r => r.ok ? r.json() : null).catch(() => null),
     fetchT(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${getDateDaysAgo(7)}&to=${getToday()}&token=${env.FINNHUB_KEY}`)
       .then(r => r.ok ? r.json() : []).catch(() => []),
+    yahooProfile(t), // business summary + executives (CEO/CFO) — free, unlimited
   ]);
 
   const parts = [];
@@ -303,26 +306,27 @@ async function fetchCompanyInfo(env, t, fallbackName, question) {
   } else if (fallbackName) {
     parts.push(`${t} is ${fallbackName}.`);
   }
-  // Background, general so we never patch this per-company: Wikipedia for names it
-  // covers, else a live web search. This is what lets even a no-name penny stock be
-  // described from real sources instead of "details not available" / a guess.
-  if (name) {
+  // Yahoo gives the reliable, unlimited background: what the company does +
+  // who runs it (CEO/CFO/COO). Covers US, foreign (.TO) and penny stocks, so it's
+  // the primary source for "what is X" and "who is the CEO" — no quota to burn.
+  let haveBg = false;
+  if (yahoo && yahoo.summary) { parts.push(`Business summary: ${yahoo.summary}`); haveBg = true; }
+  if (yahoo && yahoo.officers) parts.push(`Key executives: ${yahoo.officers}.`);
+  // Wikipedia adds history/notability when Yahoo had no summary.
+  if (name && !haveBg) {
     const bg = await wikiSummary(name);
-    if (bg) parts.push(`Wikipedia background on ${name}: ${bg}`);
-    // Web search is rate-limited on the free tier, so fire it only when it earns
-    // its keep: the question needs live specifics the profile lacks (CEO, news,
-    // recent events), OR we have no background at all (no-name/penny stock). The
-    // query uses the REAL company name, never the bare ticker ("BTE"). Returns ''
-    // on a 429 etc., so the model just falls back to the profile — never blocks.
-    const needWeb = questionNeedsWeb(question);
-    const noBackground = !bg && !(profile && profile.name);
-    if (needWeb || noBackground) {
-      const q = needWeb ? name + ' ' + question : name + ' company business profile';
-      const web = await webSearch(env, q.slice(0, 200), 3);
-      if (web) parts.push(needWeb
-        ? `Live web results for the user's question (use for CEO/management, latest developments, specifics; quote concrete facts from here): ${web}`
-        : `Web search background on ${name}: ${web}`);
-    }
+    if (bg) { parts.push(`Wikipedia background on ${name}: ${bg}`); haveBg = true; }
+  }
+  // Web search (rate-limited free tier) is now narrow: only RECENT/news questions
+  // — Yahoo already covers description + management — or a last resort when nothing
+  // else has any background. Returns '' on a 429, so chat never blocks.
+  const q = question || '';
+  const newsQ = /\b(news|latest|recent|today|update|announce|develop|happen)\b/i.test(q) ||
+    /новин|останн|нещодавн|сьогодн|оновлен|поді/i.test(q);
+  if (name && (newsQ || !haveBg)) {
+    const sq = newsQ ? name + ' ' + q + ' latest news' : name + ' company business';
+    const web = await webSearch(env, sq.slice(0, 200), 3);
+    if (web) parts.push(`Live web results for the question (recent specifics — quote concrete facts from here): ${web}`);
   }
   if (Array.isArray(news) && news.length > 0) {
     parts.push(
@@ -351,26 +355,11 @@ async function wikiSummary(name) {
   return '';
 }
 
-// Real company background for tickers Finnhub and Wikipedia don't cover — small
-// caps, penny stocks, foreign listings, brand-new names. Ollama Cloud web search
-// (same key as the AI engine) returns the company's own site + filings text, so
-// the model describes a real business instead of refusing or guessing. Called
-// ONLY as the last resort (after Finnhub profile and Wikipedia both miss), so
-// famous names stay free and only no-name companies spend a search call.
-// Returns a compact string or '' on any miss.
-// Does the user's question need a live web lookup (people, management, recent
-// events, deals), or can the static profile + the model's knowledge answer it?
-// Gating keeps the rate-limited free-tier web search for the cases that need it,
-// instead of one search per message. EN + UA cues.
-function questionNeedsWeb(q) {
-  if (!q) return false;
-  return /\b(who|ceo|chief|exec|executive|found|founder|director|board|manage|management|lead|leader|leads|runs?|owner|owns?|news|latest|recent|announce|guidance|deal|acqui|merger|partner|when|history|headquarter|employ|hire)\b/i.test(q)
-    || /хто|керівн|директор|засновн|очолю|керу|власник|новин|останн|нещодавн|угод|придба|злитт|партнер|коли|історі|штаб|працівник|найн/i.test(q);
-}
-
-// Per-isolate cache so repeated identical searches (popular tickers, the same
-// "who is the CEO of AAPL") reuse one result instead of spending quota each time.
-// The free-tier web_search rate-limits hard, so every saved call matters.
+// Ollama Cloud web search (same key as the AI engine) for genuinely recent info
+// (news, latest developments) that the static Yahoo/Finnhub profiles can't have.
+// The free tier rate-limits hard, so callers keep it narrow and it's cached.
+// Returns a compact string or '' on any miss (incl. 429) — never blocks the caller.
+// Per-isolate cache so repeated identical searches reuse one result.
 const webCache = new Map();
 const WEB_CACHE_TTL = 30 * 60 * 1000; // 30 min
 
@@ -397,6 +386,56 @@ async function webSearch(env, query, maxResults = 3) {
     webCache.set(key, { t: Date.now(), v: out });
     return out;
   } catch { return ''; }
+}
+
+// Yahoo company profile: business summary + key executives (CEO/CFO/COO). Free and
+// UNLIMITED (unlike Ollama web_search), and it covers US, foreign (.TO) and penny
+// stocks Finnhub has no profile for — so it's the reliable source for "what does
+// it do" and "who runs it". Needs a crumb + cookie (else 401); both are cached per
+// isolate and refetched on expiry.
+const YH_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+let yahooCrumb = null; // { crumb, cookie, t }
+
+async function getYahooCrumb(force) {
+  if (!force && yahooCrumb && Date.now() - yahooCrumb.t < 30 * 60 * 1000) return yahooCrumb;
+  try {
+    const c = await fetchT('https://fc.yahoo.com/', { headers: { 'User-Agent': YH_UA } }, 5000);
+    const cookie = (c.headers.get('set-cookie') || '').split(';')[0];
+    if (!cookie) return null;
+    const r = await fetchT('https://query2.finance.yahoo.com/v1/test/getcrumb',
+      { headers: { 'User-Agent': YH_UA, 'Cookie': cookie } }, 5000);
+    const crumb = (await r.text()).trim();
+    if (crumb && crumb.length < 30 && !crumb.includes('<')) {
+      yahooCrumb = { crumb, cookie, t: Date.now() };
+      return yahooCrumb;
+    }
+  } catch { /* fall through to null */ }
+  return null;
+}
+
+async function yahooProfile(symbol) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cr = await getYahooCrumb(attempt === 1); // 2nd try forces a fresh crumb
+    if (!cr) return null;
+    try {
+      const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
+        `?modules=assetProfile&crumb=${encodeURIComponent(cr.crumb)}`;
+      const res = await fetchT(url, { headers: { 'User-Agent': YH_UA, 'Cookie': cr.cookie } }, 5000);
+      if (res.status === 401) { yahooCrumb = null; continue; } // stale crumb — retry once
+      if (!res.ok) return null;
+      const data = await res.json();
+      const p = data?.quoteSummary?.result?.[0]?.assetProfile;
+      if (!p) return null;
+      const officers = (p.companyOfficers || [])
+        .filter(o => o.name)
+        .slice(0, 5)
+        .map(o => o.title ? `${o.name} (${o.title})` : o.name)
+        .join(', ');
+      const summary = (p.longBusinessSummary || '').slice(0, 800);
+      return (summary || officers) ? { summary, officers } : null;
+    } catch { return null; }
+  }
+  return null;
 }
 
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
@@ -665,15 +704,15 @@ async function handleAnalyze(request, env, ctx) {
   // so the prompt below tells it to stay honest instead of inventing facts).
   const companyName = profile.name || resolvedName || t;
   const thinData = !profile.name;
-  // Foreign/TSX stock with no Finnhub profile → pull Wikipedia background so the
-  // AI can describe the real business (a named miner shouldn't read "unknown").
-  // No Finnhub profile (foreign/penny/no-name) → describe the real business from
-  // Wikipedia, or a live web search when Wikipedia has no article. General, so we
-  // never hand-fix individual tickers.
+  // No Finnhub profile (foreign/penny/no-name) → describe the real business.
+  // Yahoo first (free, unlimited, covers penny/foreign), then Wikipedia, then a
+  // web search as last resort. General, so we never hand-fix individual tickers.
   let background = '';
-  if (thinData && companyName && companyName !== t) {
-    background = await wikiSummary(companyName);
-    if (!background) background = await webSearch(env, companyName + ' company business profile');
+  if (thinData) {
+    const yp = await yahooProfile(t);
+    if (yp && yp.summary) background = yp.summary;
+    if (!background && companyName && companyName !== t) background = await wikiSummary(companyName);
+    if (!background && companyName && companyName !== t) background = await webSearch(env, companyName + ' company business profile');
   }
 
   const context = `
@@ -977,7 +1016,7 @@ async function handleChat(request, env) {
     priceHistory ? 'For questions about past prices ("2 days ago", "last week", "yesterday"), use the recent daily closing prices above — count back from today. Give the actual dated price, do NOT say you lack historical data.' : '',
     companyInfo,
     candidateNote,
-    companyInfo ? 'Use the company profile, background (Wikipedia or web search), and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
+    companyInfo ? 'Use the company profile, business summary, key executives, background, and news above to answer questions about the company — including "who is the CEO / who runs it / management" (answer from the Key executives list) and what it does, history, country, current events. For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
     (userCurrency && userCurrency !== 'USD' && userFxRate > 0)
       ? `The user's display currency is ${userCurrency} (1 USD = ${userFxRate} ${userCurrency}). When stating prices, give USD first and add the approximate ${userCurrency} value in parentheses.`
