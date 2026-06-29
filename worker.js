@@ -277,7 +277,7 @@ async function fetchRecentCloses(t) {
   }
 }
 
-async function fetchCompanyInfo(env, t, fallbackName) {
+async function fetchCompanyInfo(env, t, fallbackName, question) {
   if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
 
   const [profile, news] = await Promise.all([
@@ -307,10 +307,22 @@ async function fetchCompanyInfo(env, t, fallbackName) {
   // covers, else a live web search. This is what lets even a no-name penny stock be
   // described from real sources instead of "details not available" / a guess.
   if (name) {
-    let bg = await wikiSummary(name);
-    let src = 'Wikipedia';
-    if (!bg) { bg = await webSearch(env, name + ' company business profile'); src = 'Web search'; }
-    if (bg) parts.push(`${src} background on ${name}: ${bg}`);
+    const bg = await wikiSummary(name);
+    if (bg) parts.push(`Wikipedia background on ${name}: ${bg}`);
+    // Web search is rate-limited on the free tier, so fire it only when it earns
+    // its keep: the question needs live specifics the profile lacks (CEO, news,
+    // recent events), OR we have no background at all (no-name/penny stock). The
+    // query uses the REAL company name, never the bare ticker ("BTE"). Returns ''
+    // on a 429 etc., so the model just falls back to the profile — never blocks.
+    const needWeb = questionNeedsWeb(question);
+    const noBackground = !bg && !(profile && profile.name);
+    if (needWeb || noBackground) {
+      const q = needWeb ? name + ' ' + question : name + ' company business profile';
+      const web = await webSearch(env, q.slice(0, 200), 3);
+      if (web) parts.push(needWeb
+        ? `Live web results for the user's question (use for CEO/management, latest developments, specifics; quote concrete facts from here): ${web}`
+        : `Web search background on ${name}: ${web}`);
+    }
   }
   if (Array.isArray(news) && news.length > 0) {
     parts.push(
@@ -346,22 +358,44 @@ async function wikiSummary(name) {
 // ONLY as the last resort (after Finnhub profile and Wikipedia both miss), so
 // famous names stay free and only no-name companies spend a search call.
 // Returns a compact string or '' on any miss.
+// Does the user's question need a live web lookup (people, management, recent
+// events, deals), or can the static profile + the model's knowledge answer it?
+// Gating keeps the rate-limited free-tier web search for the cases that need it,
+// instead of one search per message. EN + UA cues.
+function questionNeedsWeb(q) {
+  if (!q) return false;
+  return /\b(who|ceo|chief|exec|executive|found|founder|director|board|manage|management|lead|leader|leads|runs?|owner|owns?|news|latest|recent|announce|guidance|deal|acqui|merger|partner|when|history|headquarter|employ|hire)\b/i.test(q)
+    || /хто|керівн|директор|засновн|очолю|керу|власник|новин|останн|нещодавн|угод|придба|злитт|партнер|коли|історі|штаб|працівник|найн/i.test(q);
+}
+
+// Per-isolate cache so repeated identical searches (popular tickers, the same
+// "who is the CEO of AAPL") reuse one result instead of spending quota each time.
+// The free-tier web_search rate-limits hard, so every saved call matters.
+const webCache = new Map();
+const WEB_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
 async function webSearch(env, query, maxResults = 3) {
   if (!query || !env.OLLAMA_API_KEY) return '';
+  const key = query.toLowerCase().trim();
+  const cached = webCache.get(key);
+  if (cached && Date.now() - cached.t < WEB_CACHE_TTL) return cached.v;
   try {
     const res = await fetchT('https://ollama.com/api/web_search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + env.OLLAMA_API_KEY },
       body: JSON.stringify({ query, max_results: maxResults }),
     }, 6000);
-    if (!res.ok) return '';
+    if (!res.ok) return ''; // 429/5xx — caller falls back to profile, never blocks
     const data = await res.json();
     const results = data.results || [];
     if (!results.length) return '';
-    return results.slice(0, maxResults)
+    const out = results.slice(0, maxResults)
       .map(r => (r.title || '').trim() + ': ' + (r.content || '').replace(/\s+/g, ' ').trim().slice(0, 300))
       .join(' | ')
       .slice(0, 900);
+    if (webCache.size > 500) webCache.clear(); // memory guard
+    webCache.set(key, { t: Date.now(), v: out });
+    return out;
   } catch { return ''; }
 }
 
@@ -898,7 +932,6 @@ async function handleChat(request, env) {
   let liveData = '';
   let companyInfo = '';
   let priceHistory = '';
-  let webAnswer = '';
   if (potentialTickers.length > 0) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
@@ -912,18 +945,16 @@ async function handleChat(request, env) {
     // Deep info follows the first ticker WITH a live price — "firm" (no price)
     // must not steal it from the Intel being discussed
     const primary = results.find(r => r.d && r.d.c > 0);
-    // Profile/news, recent daily closes, AND a web search keyed on the user's
-    // actual question — all in parallel. The question-aware search is what lets
-    // chat answer specifics the static profile lacks (CEO/management, latest
-    // developments) instead of "not in my data" (Pylyp: Groq direct gave more).
-    const primaryName = primary ? (primary.name || primary.ticker) : '';
-    const [info, history, webAns] = primary
+    // Profile/news + recent daily closes. fetchCompanyInfo also runs a web search
+    // keyed on the user's question (passed in) — done THERE because that's where
+    // the real company name lives (Finnhub profile.name), so the search query is
+    // "Baytex Energy Corp who is the CEO" and not the ambiguous bare ticker "BTE".
+    const [info, history] = primary
       ? await Promise.all([
-          fetchCompanyInfo(env, primary.ticker, primary.name),
+          fetchCompanyInfo(env, primary.ticker, primary.name, lastMsg),
           fetchRecentCloses(primary.ticker),
-          webSearch(env, (primaryName + ' ' + lastMsg).slice(0, 200), 3),
         ])
-      : ['', '', ''];
+      : ['', ''];
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
       .map(r => {
@@ -933,7 +964,6 @@ async function handleChat(request, env) {
     if (quotes.length > 0) liveData = 'Live market data: ' + quotes.join('; ') + '.';
     companyInfo = info;
     priceHistory = history;
-    webAnswer = webAns;
   }
 
   const system = [
@@ -946,7 +976,6 @@ async function handleChat(request, env) {
     priceHistory,
     priceHistory ? 'For questions about past prices ("2 days ago", "last week", "yesterday"), use the recent daily closing prices above — count back from today. Give the actual dated price, do NOT say you lack historical data.' : '',
     companyInfo,
-    webAnswer ? 'Live web search results for the user\'s current question (fetched just now — use these for specifics the profile lacks: executives/CEO and management, latest developments, projects, deals; quote concrete facts from here): ' + webAnswer : '',
     candidateNote,
     companyInfo ? 'Use the company profile, background (Wikipedia or web search), and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
