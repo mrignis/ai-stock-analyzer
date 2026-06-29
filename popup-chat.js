@@ -3,14 +3,8 @@
 // ── Chat ──────────────────────────────────────────────────────────────────────
 // Split out of popup.js (no build step): shares the global scope, loaded before
 // popup.js so its functions exist when the DOMContentLoaded handler wires them.
-// Global state (chatHistory, chatContext, conversations, currentConvId,
+// Global state (chatHistory, conversations, currentConvId,
 // convListVisible, chatSending) is declared in popup.js.
-
-// Shows ctx bar with ticker, or hides it when ticker is falsy
-function setCtxBar(ticker) {
-  document.getElementById('chat-ctx-ticker').textContent = ticker || '';
-  document.getElementById('chat-ctx-bar').style.display = ticker ? 'flex' : 'none';
-}
 
 function welcomeHtml(text) {
   return '<div class="chat-welcome" id="chat-welcome"><div class="chat-welcome-icon">🤖</div>' +
@@ -26,7 +20,6 @@ function saveCurrentConv() {
   var idx = conversations.findIndex(function(c) { return c.id === currentConvId; });
   if (idx >= 0) {
     conversations[idx].messages = chatHistory;
-    conversations[idx].context = chatContext;
   }
   saveConversations();
 }
@@ -37,15 +30,13 @@ function newChat() {
 
   // Create new conversation
   var id = Date.now();
-  var conv = { id: id, title: lang === 'ua' ? 'Новий діалог' : 'New chat', messages: [], context: null, date: id };
+  var conv = { id: id, title: lang === 'ua' ? 'Новий діалог' : 'New chat', messages: [], date: id };
   conversations.unshift(conv);
   currentConvId = id;
   chatHistory = [];
-  chatContext = null;
 
   // Reset UI
   document.getElementById('chat-conv-title').textContent = conv.title;
-  setCtxBar(null);
   document.getElementById('chat-messages').innerHTML =
     welcomeHtml(lang === 'ua' ? 'Привіт! Запитай мене про будь-яку акцію або ринок.' : 'Hi! Ask me about any stock or market.');
 
@@ -60,19 +51,16 @@ function toggleConvList() {
   var listEl = document.getElementById('conv-list');
   var msgsEl = document.getElementById('chat-messages');
   var inputRow = document.querySelector('.chat-input-row');
-  var ctxBar = document.getElementById('chat-ctx-bar');
 
   if (convListVisible) {
     listEl.classList.add('active');
     msgsEl.style.display = 'none';
     inputRow.style.display = 'none';
-    ctxBar.style.display = 'none';
     renderConvList();
   } else {
     listEl.classList.remove('active');
     msgsEl.style.display = 'flex';
     inputRow.style.display = 'flex';
-    if (chatContext) ctxBar.style.display = 'flex';
   }
 }
 
@@ -114,9 +102,7 @@ function loadConversation(id) {
 
   currentConvId = id;
   chatHistory = conv.messages || [];
-  chatContext = null; // context bar removed — never restore a stale pinned ticker
   document.getElementById('chat-conv-title').textContent = conv.title;
-  setCtxBar(null);
 
   // Restore messages
   document.getElementById('chat-messages').innerHTML = '';
@@ -142,9 +128,7 @@ function deleteConversation(id) {
     } else {
       currentConvId = null;
       chatHistory = [];
-      chatContext = null;
       document.getElementById('chat-conv-title').textContent = lang === 'ua' ? 'Новий діалог' : 'New chat';
-      setCtxBar(null);
     }
   }
   saveConversations();
@@ -153,15 +137,8 @@ function deleteConversation(id) {
 
 // Context hand-off removed (Pylyp): the pinned "Контекст: TICKER" bar stuck to a
 // stale ticker across unrelated questions. Chat now resolves the ticker from each
-// question (live data + web search + conversation history), so no persistent
-// context is needed. Kept as a no-op so the analysis screen can still call it.
-function setChatContext(ticker, data) { /* intentionally no-op */ }
-
-function clearChatContext() {
-  chatContext = null;
-  setCtxBar(null);
-  saveCurrentConv();
-}
+// question itself (live data + web search + conversation history), so there is no
+// persistent context at all.
 
 function timeSince(ts) { return timeAgo(ts, false); }
 
@@ -180,7 +157,7 @@ function sendChat() {
   if (!currentConvId) {
     var id = Date.now();
     var title = msg.slice(0, 35) + (msg.length > 35 ? '…' : '');
-    var conv = { id: id, title: title, messages: [], context: chatContext, date: id };
+    var conv = { id: id, title: title, messages: [], date: id };
     conversations.unshift(conv);
     currentConvId = id;
     document.getElementById('chat-conv-title').textContent = title;
@@ -202,7 +179,7 @@ function sendChat() {
   fetch(WORKER_URL + '/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: chatHistory, context: chatContext, lang: lang, currency: currency, fxRate: fxRate }),
+    body: JSON.stringify({ messages: chatHistory, lang: lang, currency: currency, fxRate: fxRate }),
   })
     .then(function(r) { return r.text(); })
     .then(function(txt) {

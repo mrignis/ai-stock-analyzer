@@ -135,10 +135,6 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 /* ── Chat ─────────────────────────────────────────────────────────────────── */
 #panel-chat{display:none;flex-direction:column;height:490px;padding:10px 14px}
 #panel-chat.active{display:flex}
-.chat-ctx-bar{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:6px 10px;margin-bottom:8px;display:none;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted)}
-.chat-ctx-bar .ctx-tick{color:var(--green);font-weight:500}
-.chat-ctx-clear{margin-left:auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px;line-height:1}
-.chat-ctx-clear:hover{color:var(--red)}
 .chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 0 8px 0;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
 .chat-messages::-webkit-scrollbar{width:4px}
 .chat-messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
@@ -372,12 +368,6 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
     <span class="chat-toolbar-title" id="chat-conv-title">Новий діалог</span>
     <button class="btn-outline" id="btn-conv-list" title="Діалоги" style="padding:0 8px;font-size:12px">☰</button>
     <button class="btn-outline" id="btn-new-chat" title="Новий діалог" style="padding:0 8px;font-size:13px">✏️</button>
-  </div>
-  <div class="chat-ctx-bar" id="chat-ctx-bar">
-    <span>💬</span>
-    <span id="lbl-chat-ctx">Контекст:</span>
-    <span class="ctx-tick" id="chat-ctx-ticker"></span>
-    <button class="chat-ctx-clear" id="chat-ctx-clear">✕</button>
   </div>
   <!-- Conversations list (hidden by default) -->
   <div class="conv-list" id="conv-list"></div>

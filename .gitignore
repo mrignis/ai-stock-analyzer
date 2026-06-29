@@ -9,5 +9,6 @@ tests/
 .claude/
 make_icons.py
 _*.ps1
+store-resize.ps1
 _*.py
 _*.txt

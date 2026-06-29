@@ -5,7 +5,7 @@
 // before popup.js. Deps (runtime): WORKER_URL, lang, currentTicker, currentData,
 // fxRate, watchlist (popup.js); cacheGet/cacheSet, fmtMoney, formatPrice,
 // formatChange, pillClass, loadLivePrice (core.js); renderChart (popup-charts.js);
-// setChatContext (popup-chat.js); addToHistory (popup.js). Callers are runtime.
+// addToHistory (popup.js). Callers are runtime.
 
 // ── Analysis ──────────────────────────────────────────────────────────────────
 var currentAbort = null;
@@ -299,7 +299,6 @@ function finish(ticker, data) {
   currentData = data;
   addHistory(ticker, data);
   renderResult(ticker, data);
-  setChatContext(ticker, data);
   fetchRealChart(ticker, data.color);
 }
 

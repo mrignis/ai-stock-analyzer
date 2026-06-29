@@ -16,8 +16,7 @@ var portfolio = []; // [{ticker, shares, buyPrice, addedAt}]
 
 // Chat state
 var chatHistory = [];
-var chatContext = null;
-var conversations = []; // [{id, title, messages, context}]
+var conversations = []; // [{id, title, messages}]
 var currentConvId = null;
 var convListVisible = false;
 var chatSending = false; // guard against concurrent send requests
@@ -47,7 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
       var conv = conversations.find(function(c) { return c.id === currentConvId; });
       if (conv) {
         chatHistory = conv.messages || [];
-        chatContext = null; // context bar removed — chat resolves tickers per-question
         document.getElementById('chat-conv-title').textContent = conv.title || 'Діалог';
         chatHistory.forEach(function(msg) {
           appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
@@ -144,7 +142,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('news-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') fetchNews(this.value.trim().toUpperCase()); });
     document.getElementById('chat-send-btn').addEventListener('click', sendChat);
     document.getElementById('chat-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') sendChat(); });
-    document.getElementById('chat-ctx-clear').addEventListener('click', clearChatContext);
     document.getElementById('btn-new-chat').addEventListener('click', newChat);
     document.getElementById('btn-conv-list').addEventListener('click', toggleConvList);
 
@@ -257,7 +254,6 @@ var I18N_LABELS = [
   ['btn-add-target', '+ Додати ціль', '+ Add target'],
   ['btn-save-threshold', 'Зберегти', 'Save'],
   ['btn-check-now', '↻ Перевірити', '↻ Check now'],
-  ['lbl-chat-ctx', 'Контекст:', 'Context:'],
   ['lbl-chat-welcome', 'Привіт! Запитай мене про будь-яку акцію або ринок.', 'Hi! Ask me about any stock or market.'],
   ['news-search-btn', 'Пошук', 'Search'],
   ['lbl-news-empty', 'Введи тікер або вибери зі списку', 'Enter a ticker or pick from the list'],
