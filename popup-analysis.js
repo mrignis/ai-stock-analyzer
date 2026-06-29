@@ -62,8 +62,8 @@ function runAnalysis() {
     fetchFreshPrice(raw, null);
 
     var signal = currentAbort.signal;
-    // Auto-abort after 65s: at peak hours Groq free tier queues requests
-    // (measured 58s on QQQ) — better to wait than to drop a near-ready result
+    // Auto-abort after 65s: the AI engine (qwen3-coder on Ollama Cloud free
+    // tier) can queue under load — better to wait than to drop a near-ready result
     var timeoutId = setTimeout(function() {
       if (currentAbort) { currentAbort.abort(); currentAbort = null; }
     }, 65000);

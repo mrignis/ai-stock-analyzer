@@ -1,6 +1,6 @@
 // AI Stock Analyzer — Cloudflare Worker
 // Deploy: wrangler deploy
-// Secrets: wrangler secret put GROQ_KEY
+// Secrets: wrangler secret put OLLAMA_API_KEY
 //          wrangler secret put FINNHUB_KEY
 
 const CORS = {
@@ -9,8 +9,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// AI engine: Ollama Cloud (OpenAI-compatible endpoint, same response shape as
+// Groq used to return). qwen3-coder:480b is the smart primary (~2-3s); when it
+// times out or errors we fall back to the faster qwen3-coder-next. Both run on
+// the free Ollama Cloud tier (general qwen3.5 needs a paid subscription).
+const AI_MODEL = 'qwen3-coder:480b-cloud';
+const AI_URL = 'https://ollama.com/v1/chat/completions';
 
 const CRYPTO_MAP = {
   'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
@@ -30,29 +34,29 @@ const CRYPTO_NAMES = {
   'TRON': 'TRX',
 };
 
-const GROQ_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but never queued
+const AI_FALLBACK_MODEL = 'qwen3-coder-next'; // backup engine: smaller, faster, same free tier
 
-async function callGroq(env, messages, temperature = 0.3, maxTokens = 2048) {
-  // Primary engine (70B, 20s) → on timeout/overload retry with the fast
-  // fallback (8B-instant, 12s). User always gets an answer at peak hours.
+async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
+  // Primary engine (qwen3-coder:480b, 30s) → on timeout/overload retry with the
+  // fast fallback (qwen3-coder-next, 15s). User always gets an answer at peak hours.
   try {
-    return await groqRequest(env, GROQ_MODEL, messages, temperature, maxTokens, 20000);
+    return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 30000);
   } catch (e) {
-    return await groqRequest(env, GROQ_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
+    return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 15000);
   }
 }
 
-async function groqRequest(env, model, messages, temperature, maxTokens, timeoutMs) {
+async function aiRequest(env, model, messages, temperature, maxTokens, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let res;
   try {
-    res = await fetch(GROQ_URL, {
+    res = await fetch(AI_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + env.GROQ_KEY,
+        'Authorization': 'Bearer ' + env.OLLAMA_API_KEY,
       },
       body: JSON.stringify({
         model,
@@ -64,27 +68,27 @@ async function groqRequest(env, model, messages, temperature, maxTokens, timeout
     });
   } catch (e) {
     clearTimeout(timer);
-    if (e.name === 'AbortError') throw new Error('Groq timeout — спробуй ще раз / try again');
+    if (e.name === 'AbortError') throw new Error('AI timeout — спробуй ще раз / try again');
     throw e;
   }
   clearTimeout(timer);
 
-  // Read as text first — Groq sometimes returns HTML error pages instead of JSON
+  // Read as text first — the API may return an HTML/plain error page, not JSON
   const rawText = await res.text();
   let data;
   try {
     data = JSON.parse(rawText);
   } catch {
-    // Not valid JSON — Groq returned an error page
+    // Not valid JSON — the AI provider returned an error page
     if (res.status === 503 || res.status === 504 || res.status === 502) {
-      throw new Error('Groq перевантажений (HTTP ' + res.status + '). Спробуй ще раз / Try again.');
+      throw new Error('AI перевантажений (HTTP ' + res.status + '). Спробуй ще раз / Try again.');
     }
-    throw new Error('Groq error (HTTP ' + res.status + '). Try again.');
+    throw new Error('AI error (HTTP ' + res.status + '). Try again.');
   }
 
-  if (data.error) throw new Error('Groq: ' + (data.error.message || JSON.stringify(data.error)));
+  if (data.error) throw new Error('AI: ' + (data.error.message || JSON.stringify(data.error)));
   const text = data.choices?.[0]?.message?.content || '';
-  if (!text) throw new Error('Groq returned empty response');
+  if (!text) throw new Error('AI returned empty response');
   return text;
 }
 
@@ -123,7 +127,7 @@ export default {
 
     try {
       if (url.pathname === '/test' && request.method === 'GET') {
-        return json({ ok: true, time: Date.now(), model: GROQ_MODEL });
+        return json({ ok: true, time: Date.now(), model: AI_MODEL });
       }
       // Edge cache for hot GET endpoints: every client sees the SAME price
       // within a 20s window (consistency) and repeat hits answer in ~50ms
@@ -508,10 +512,10 @@ async function handleAnalyze(request, env, ctx) {
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
   // Edge cache: the AI verdict for a given ticker+lang is identical for everyone
-  // for ~30 min. First user pays the 30-65s Groq cost; every later user with the
+  // for ~30 min. First user pays the AI cost; every later user with the
   // same ticker gets the result straight from Cloudflare's edge in ~50ms — and
-  // the shared free Groq key is hit ONCE per ticker, not once per user (this is
-  // the scaling guard: 100 people analyzing AAPL = 1 Groq call, not 100).
+  // the shared free Ollama key is hit ONCE per ticker, not once per user (this is
+  // the scaling guard: 100 people analyzing AAPL = 1 AI call, not 100).
   // Synthetic GET key (POST bodies aren't auto-cached); only successful results
   // are stored, so a transient error is never cached.
   const cache = caches.default;
@@ -641,7 +645,7 @@ Return ONLY this JSON structure:
 
   let text;
   try {
-    text = await callGroq(env, [
+    text = await callAI(env, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], 0.3, 1024);
@@ -916,14 +920,14 @@ async function handleChat(request, env) {
     'Use plain text only — no markdown, no asterisks. If you need a list, start each line with "- " (dash and space). Use line breaks between paragraphs.',
   ].filter(Boolean).join(' ');
 
-  const groqMessages = [
+  const aiMessages = [
     { role: 'system', content: system },
     ...safeMessages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
   ];
 
   let reply;
   try {
-    reply = await callGroq(env, groqMessages, 0.7, 800);
+    reply = await callAI(env, aiMessages, 0.7, 800);
   } catch (e) {
     return json({ error: e.message }, 500);
   }

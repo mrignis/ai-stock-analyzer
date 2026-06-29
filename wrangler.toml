@@ -4,7 +4,7 @@ compatibility_date = "2024-12-01"
 
 # Deploy: wrangler deploy
 # Set secrets (run once):
-#   wrangler secret put GEMINI_KEY    ← Google AI Studio → Get API key (free)
-#   wrangler secret put FINNHUB_KEY   ← finnhub.io → Dashboard → API Key (free)
+#   wrangler secret put OLLAMA_API_KEY  ← ollama.com → Settings → API keys (free tier)
+#   wrangler secret put FINNHUB_KEY     ← finnhub.io → Dashboard → API Key (free)
 #
 # After deploy, copy your worker URL into popup.js and background.js (WORKER_URL constant)
