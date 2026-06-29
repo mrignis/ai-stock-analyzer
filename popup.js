@@ -89,6 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
       save({ lang: lang });
       applyLang();
       renderWatchlist();
+      renderHomeWatchlist(); // home "Список" verdicts/labels must switch language too
       // Portfolio renders its own labels (акцій/shares, Сьогодні/Today) — must
       // re-render too, or it stays in the old language while static labels switch
       if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();

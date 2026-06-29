@@ -202,7 +202,9 @@ function renderWatchlist() {
       e.stopPropagation();
       var t = this.getAttribute('data-ticker');
       watchlist.forEach(function(w) { if (w.ticker === t) w.home = !w.home; });
-      save({ watchlist: watchlist }); renderWatchlist();
+      // Refresh BOTH lists: re-render the home selection immediately, else the
+      // star looks like it does nothing until the popup is reopened (Pylyp).
+      save({ watchlist: watchlist }); renderWatchlist(); renderHomeWatchlist();
     });
   }
   var removes = el.querySelectorAll('.watch-remove');
@@ -211,7 +213,7 @@ function renderWatchlist() {
       e.stopPropagation();
       var t = this.getAttribute('data-ticker');
       watchlist = watchlist.filter(function(w) { return w.ticker !== t; });
-      save({ watchlist: watchlist }); renderWatchlist(); updateWatchBtn();
+      save({ watchlist: watchlist }); renderWatchlist(); renderHomeWatchlist(); updateWatchBtn();
     });
   }
 
