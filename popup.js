@@ -47,12 +47,8 @@ document.addEventListener('DOMContentLoaded', function() {
       var conv = conversations.find(function(c) { return c.id === currentConvId; });
       if (conv) {
         chatHistory = conv.messages || [];
-        chatContext = conv.context || null;
+        chatContext = null; // context bar removed — chat resolves tickers per-question
         document.getElementById('chat-conv-title').textContent = conv.title || 'Діалог';
-        if (chatContext) {
-          var ticker = chatContext.split(':')[0];
-          setCtxBar(ticker);
-        }
         chatHistory.forEach(function(msg) {
           appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
         });
@@ -262,7 +258,7 @@ var I18N_LABELS = [
   ['btn-save-threshold', 'Зберегти', 'Save'],
   ['btn-check-now', '↻ Перевірити', '↻ Check now'],
   ['lbl-chat-ctx', 'Контекст:', 'Context:'],
-  ['lbl-chat-welcome', 'Привіт! Запитай мене про будь-яку акцію або ринок. Після аналізу — отримую контекст автоматично.', 'Hi! Ask me about any stock or market. After analysis, I get context automatically.'],
+  ['lbl-chat-welcome', 'Привіт! Запитай мене про будь-яку акцію або ринок.', 'Hi! Ask me about any stock or market.'],
   ['news-search-btn', 'Пошук', 'Search'],
   ['lbl-news-empty', 'Введи тікер або вибери зі списку', 'Enter a ticker or pick from the list'],
   ['stop-btn', '✕ Стоп', '✕ Stop'],

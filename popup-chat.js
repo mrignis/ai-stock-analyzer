@@ -114,11 +114,9 @@ function loadConversation(id) {
 
   currentConvId = id;
   chatHistory = conv.messages || [];
-  chatContext = conv.context || null;
+  chatContext = null; // context bar removed — never restore a stale pinned ticker
   document.getElementById('chat-conv-title').textContent = conv.title;
-
-  // Restore context bar
-  setCtxBar(chatContext ? chatContext.split(':')[0] : null);
+  setCtxBar(null);
 
   // Restore messages
   document.getElementById('chat-messages').innerHTML = '';
@@ -153,21 +151,11 @@ function deleteConversation(id) {
   renderConvList();
 }
 
-function setChatContext(ticker, data) {
-  var q = data._quote || {};
-  var priceStr = q.c ? '$' + q.c + (q.dp != null ? ' (' + (q.dp > 0 ? '+' : '') + q.dp.toFixed(2) + '% today)' : '') : '';
-  chatContext = ticker + (priceStr ? ' current price ' + priceStr : '') +
-    (data._name ? ' (' + data._name + ')' : '') +
-    ': sector=' + data.sector +
-    (data._country ? ', country of registration=' + data._country : '') +
-    ', verdict=' + data.verdict +
-    ', trend=' + data.trend +
-    ', risk=' + data.risk +
-    (data.what ? ', company: ' + data.what : '') +
-    '. Forecast: ' + data.forecast;
-  setCtxBar(ticker);
-  saveCurrentConv();
-}
+// Context hand-off removed (Pylyp): the pinned "Контекст: TICKER" bar stuck to a
+// stale ticker across unrelated questions. Chat now resolves the ticker from each
+// question (live data + web search + conversation history), so no persistent
+// context is needed. Kept as a no-op so the analysis screen can still call it.
+function setChatContext(ticker, data) { /* intentionally no-op */ }
 
 function clearChatContext() {
   chatContext = null;
