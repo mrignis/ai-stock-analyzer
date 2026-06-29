@@ -288,6 +288,9 @@ async function fetchCompanyInfo(env, t, fallbackName) {
   ]);
 
   const parts = [];
+  // The company name comes from Finnhub (US stocks) or the Yahoo registry
+  // (foreign/TSX listings Finnhub has no profile for, e.g. SAU.TO → St. Augustine).
+  const name = (profile && profile.name) || fallbackName || '';
   if (profile && profile.name) {
     // Guard: free-tier Finnhub may return cap as string/null — only format real numbers
     const cap = Number(profile.marketCapitalization);
@@ -297,30 +300,17 @@ async function fetchCompanyInfo(env, t, fallbackName) {
       `market cap=${cap > 0 ? '$' + (cap / 1000).toFixed(1) + 'B' : 'N/A'}, ` +
       `IPO=${profile.ipo || 'N/A'}, website=${profile.weburl || 'N/A'}.`
     );
-    // Wikipedia intro — covers history and what the company is known for.
-    // Try the full profile name first ("Apple Inc"), fall back to the stripped one.
-    try {
-      const stripped = profile.name.replace(/[,.]?\s+(Inc|Corp|Corporation|Ltd|PLC|Co|Class [A-C])\.?$/i, '').trim();
-      for (const title of [...new Set([profile.name, stripped])]) {
-        const w = await fetchT(
-          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-          { headers: { 'User-Agent': 'stock-ai-analyzer/1.0' } }
-        );
-        if (!w.ok) continue;
-        const wd = await w.json();
-        if (wd.extract && wd.type !== 'disambiguation') {
-          parts.push(`Wikipedia background on ${title}: ${wd.extract.slice(0, 700)}`);
-          break;
-        }
-      }
-    } catch { /* Wikipedia is optional — skip on any error */ }
   } else if (fallbackName) {
-    // Foreign/TSX listing Finnhub has no profile for (SAU.TO → St. Augustine Gold
-    // and Copper). Feed the Yahoo name + Wikipedia so the model answers about the
-    // real company instead of inventing one (Pylyp: chat made up "CORP $97.26").
     parts.push(`${t} is ${fallbackName}.`);
-    const wiki = await wikiSummary(fallbackName);
-    if (wiki) parts.push(`Wikipedia background on ${fallbackName}: ${wiki}`);
+  }
+  // Background, general so we never patch this per-company: Wikipedia for names it
+  // covers, else a live web search. This is what lets even a no-name penny stock be
+  // described from real sources instead of "details not available" / a guess.
+  if (name) {
+    let bg = await wikiSummary(name);
+    let src = 'Wikipedia';
+    if (!bg) { bg = await webSearch(env, name + ' company business profile'); src = 'Web search'; }
+    if (bg) parts.push(`${src} background on ${name}: ${bg}`);
   }
   if (Array.isArray(news) && news.length > 0) {
     parts.push(
@@ -347,6 +337,32 @@ async function wikiSummary(name) {
     } catch { /* optional */ }
   }
   return '';
+}
+
+// Real company background for tickers Finnhub and Wikipedia don't cover — small
+// caps, penny stocks, foreign listings, brand-new names. Ollama Cloud web search
+// (same key as the AI engine) returns the company's own site + filings text, so
+// the model describes a real business instead of refusing or guessing. Called
+// ONLY as the last resort (after Finnhub profile and Wikipedia both miss), so
+// famous names stay free and only no-name companies spend a search call.
+// Returns a compact string or '' on any miss.
+async function webSearch(env, query, maxResults = 3) {
+  if (!query || !env.OLLAMA_API_KEY) return '';
+  try {
+    const res = await fetchT('https://ollama.com/api/web_search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + env.OLLAMA_API_KEY },
+      body: JSON.stringify({ query, max_results: maxResults }),
+    }, 6000);
+    if (!res.ok) return '';
+    const data = await res.json();
+    const results = data.results || [];
+    if (!results.length) return '';
+    return results.slice(0, maxResults)
+      .map(r => (r.title || '').trim() + ': ' + (r.content || '').replace(/\s+/g, ' ').trim().slice(0, 300))
+      .join(' | ')
+      .slice(0, 900);
+  } catch { return ''; }
 }
 
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
@@ -617,7 +633,14 @@ async function handleAnalyze(request, env, ctx) {
   const thinData = !profile.name;
   // Foreign/TSX stock with no Finnhub profile → pull Wikipedia background so the
   // AI can describe the real business (a named miner shouldn't read "unknown").
-  const wiki = thinData ? await wikiSummary(companyName) : '';
+  // No Finnhub profile (foreign/penny/no-name) → describe the real business from
+  // Wikipedia, or a live web search when Wikipedia has no article. General, so we
+  // never hand-fix individual tickers.
+  let background = '';
+  if (thinData && companyName && companyName !== t) {
+    background = await wikiSummary(companyName);
+    if (!background) background = await webSearch(env, companyName + ' company business profile');
+  }
 
   const context = `
 Stock ticker: ${t}
@@ -629,7 +652,7 @@ P/E ratio: ${m['peNormalizedAnnual'] || m['peTTM'] || 'N/A'}
 52-week high: $${m['52WeekHigh'] || 'N/A'} | 52-week low: $${m['52WeekLow'] || 'N/A'}
 ROE (TTM): ${m['roeTTM'] != null ? m['roeTTM'].toFixed(1) + '%' : 'N/A'}
 Revenue growth YoY: ${m['revenueGrowthTTMYoy'] != null ? m['revenueGrowthTTMYoy'].toFixed(1) + '%' : 'N/A'}
-${wiki ? 'Wikipedia background: ' + wiki + '\n' : ''}Recent news (last 7 days):
+${background ? 'Company background: ' + background + '\n' : ''}Recent news (last 7 days):
 ${news || 'No recent news available'}`.trim();
 
   const ua = lang === 'ua';
@@ -638,7 +661,7 @@ ${news || 'No recent news available'}`.trim();
 
 ${context}
 
-${thinData ? 'NOTE: No financial profile was available — only the company name, live price, and the Wikipedia background above (if any). Describe what the company does using the Wikipedia text and the company name itself (e.g. "X Mining Corp" is clearly a mining company — say so, do not write "unknown activity"). You MAY use well-known general knowledge about the company. Do NOT invent specific figures (revenue, market cap, partnerships, dates) you are not sure of. Only if you truly do not recognise the company at all, say its details are limited.' : ''}
+${thinData ? 'NOTE: No financial profile was available — only the company name, live price, and the company background above (if any). Describe what the company does using that background and the company name itself (e.g. "X Mining Corp" is clearly a mining company — say so, do not write "unknown activity"). You MAY use well-known general knowledge about the company. Do NOT invent specific figures (revenue, market cap, partnerships, dates) you are not sure of. Only if you truly do not recognise the company AND no background was provided, say its details are limited.' : ''}
 ${ua ? 'IMPORTANT: Respond ENTIRELY in Ukrainian language using only Cyrillic characters. Never mix in Chinese, Japanese, or any other non-Cyrillic script.' : 'Respond in English only.'}
 Return ONLY this JSON structure:
 {"sector":"...","risk":"${ua ? 'Високий або Середній або Низький' : 'High or Medium or Low'}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${ua ? 'одне слово: Купувати або Тримати або Продавати' : 'one word: Buy or Hold or Sell'}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
@@ -907,7 +930,7 @@ async function handleChat(request, env) {
     priceHistory ? 'For questions about past prices ("2 days ago", "last week", "yesterday"), use the recent daily closing prices above — count back from today. Give the actual dated price, do NOT say you lack historical data.' : '',
     companyInfo,
     candidateNote,
-    companyInfo ? 'Use the company profile, Wikipedia background, and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
+    companyInfo ? 'Use the company profile, background (Wikipedia or web search), and news headlines above to answer questions about the company (founders, history, country, what is happening now). For FAMOUS companies (Apple, Microsoft, Tesla tier) you may state founders and founding year from general knowledge. For small, recent, or little-known companies: if the founder/person is NOT named in the provided data, say plainly that this information is not in your data — NEVER invent names, biographies, or education details. A made-up person is the worst possible answer. Never guess prices, market caps, or financial figures — those only from live data above.' : '',
     'IMPORTANT: You DO have internet-sourced data — live prices, recent news, and company profiles are fetched for you and provided above. Never tell the user you cannot search the internet or have no access to current information. If asked to "search", answer using the live data and news provided above.',
     (userCurrency && userCurrency !== 'USD' && userFxRate > 0)
       ? `The user's display currency is ${userCurrency} (1 USD = ${userFxRate} ${userCurrency}). When stating prices, give USD first and add the approximate ${userCurrency} value in parentheses.`
