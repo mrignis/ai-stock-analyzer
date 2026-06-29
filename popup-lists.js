@@ -102,9 +102,10 @@ function renderHomeWatchlist() {
   if (!watchlist.length) { container.style.display = 'none'; return; }
   container.style.display = 'block';
   // User picks which stocks show on home by starring them in the watchlist
-  // (w.home). If none are starred, fall back to the first 6 (prior behaviour).
+  // (w.home). Show ALL starred (up to 12 — their explicit choice, not just the
+  // first 6). If none are starred, fall back to the first 6 (prior behaviour).
   var pinned = watchlist.filter(function(w) { return w.home; });
-  var shown = (pinned.length ? pinned : watchlist).slice(0, 6);
+  var shown = pinned.length ? pinned.slice(0, 12) : watchlist.slice(0, 6);
   var html = '';
   shown.forEach(function(w) {
     var pill = pillClass(w.color);
@@ -168,15 +169,20 @@ function renderWatchlist() {
     el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Список порожній.' : 'Watchlist is empty.') + '</p></div>';
     return;
   }
-  var html = '';
+  // Hint so users discover the star picks what shows on the home screen.
+  var html = '<div style="font-size:10px;color:var(--muted);padding:2px 4px 8px;font-family:var(--mono)">' +
+    (lang === 'ua' ? '★ — обрати для головної' : '★ — pick for home screen') + '</div>';
   for (var i = 0; i < watchlist.length; i++) {
     var w = watchlist[i];
     var pill = pillClass(w.color);
     var star = w.home ? '★' : '☆';
+    // Gold filled / clearly-visible empty star — the old var(--dim) ☆ was almost
+    // invisible on the dark background, so users never noticed they could pick
+    // which stocks show on home (Pylyp). Brighter + bigger so it reads as a toggle.
     var starTitle = lang === 'ua' ? 'Показувати на головній' : 'Show on home screen';
     html += '<div class="watch-item" data-ticker="' + w.ticker + '">' +
       '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
-        'style="background:none;border:none;cursor:pointer;font-size:14px;padding:0 4px;color:' + (w.home ? 'var(--green)' : 'var(--dim)') + '">' + star + '</button>' +
+        'style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:0 5px;color:' + (w.home ? 'var(--yellow)' : 'var(--muted)') + '">' + star + '</button>' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
       '<div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div>' +
       '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
