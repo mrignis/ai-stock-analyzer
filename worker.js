@@ -223,12 +223,23 @@ function pctChange(c, pc) {
   return pc > 0 ? ((c - pc) / pc * 100) : 0;
 }
 
-// Live price with full fallback chain: Finnhub (crypto-mapped) → Yahoo Finance.
-// Returns { c, pc } or null. Used by chat so BTC etc. also get live data.
+// Live price with full fallback chain: Finnhub (crypto-mapped) → Yahoo Finance →
+// foreign exchange probe. Returns { c, pc, sym, name } or null. `sym` is the
+// resolved symbol (SAU → SAU.TO) and `name` the company name when Yahoo supplies
+// it — chat uses both so a bare foreign ticker gets live data AND company info
+// instead of the model inventing one. Used by chat so BTC etc. also get live data.
 async function getLivePrice(env, t) {
   const fh = await finnhubQuote(env, CRYPTO_MAP[t] || t);
-  if (fh && fh.c && fh.c > 0) return { c: fh.c, pc: fh.pc };
-  return await yahooQuote(CRYPTO_MAP[t] ? t + '-USD' : t);
+  if (fh && fh.c && fh.c > 0) return { c: fh.c, pc: fh.pc, sym: t };
+  const y = await yahooQuote(CRYPTO_MAP[t] ? t + '-USD' : t);
+  if (y && y.c > 0) return { c: y.c, pc: y.pc, sym: t, name: y.name };
+  // Bare ticker may be a foreign/TSX listing (SAU → SAU.TO) — same probe /price
+  // and /analyze use. Skipped for crypto and dotted/long symbols already resolved.
+  if (!CRYPTO_MAP[t] && /^[A-Z0-9]{1,6}$/.test(t)) {
+    const fx = await probeForeignExchange(t);
+    if (fx && fx.q) return { c: fx.q.c, pc: fx.q.pc, sym: fx.sym, name: fx.name };
+  }
+  return null;
 }
 
 // Deep company info for chat: profile + recent news + Wikipedia background.
@@ -262,7 +273,7 @@ async function fetchRecentCloses(t) {
   }
 }
 
-async function fetchCompanyInfo(env, t) {
+async function fetchCompanyInfo(env, t, fallbackName) {
   if (CRYPTO_MAP[t]) return ''; // crypto has no Finnhub profile/news on free tier
 
   const [profile, news] = await Promise.all([
@@ -299,6 +310,13 @@ async function fetchCompanyInfo(env, t) {
         }
       }
     } catch { /* Wikipedia is optional — skip on any error */ }
+  } else if (fallbackName) {
+    // Foreign/TSX listing Finnhub has no profile for (SAU.TO → St. Augustine Gold
+    // and Copper). Feed the Yahoo name + Wikipedia so the model answers about the
+    // real company instead of inventing one (Pylyp: chat made up "CORP $97.26").
+    parts.push(`${t} is ${fallbackName}.`);
+    const wiki = await wikiSummary(fallbackName);
+    if (wiki) parts.push(`Wikipedia background on ${fallbackName}: ${wiki}`);
   }
   if (Array.isArray(news) && news.length > 0) {
     parts.push(
@@ -848,13 +866,20 @@ async function handleChat(request, env) {
     // Prices and deep company info run in PARALLEL (saves ~0.5-1s per message);
     // deep info goes for the first detected ticker
     const results = await Promise.all(
-      potentialTickers.map(async t => ({ ticker: t, d: await getLivePrice(env, t) })));
+      potentialTickers.map(async t => {
+        const d = await getLivePrice(env, t);
+        // Show the resolved symbol (SAU → SAU.TO) so the model and the quote line
+        // both refer to the actually-traded listing, not the bare input.
+        return { ticker: (d && d.sym) || t, name: d && d.name, d };
+      }));
     // Deep info follows the first ticker WITH a live price — "firm" (no price)
     // must not steal it from the Intel being discussed
     const primary = results.find(r => r.d && r.d.c > 0);
-    // Profile/news and recent daily closes fetched together for the primary ticker
+    // Profile/news and recent daily closes fetched together for the primary ticker.
+    // primary.name (Yahoo) lets fetchCompanyInfo fall back to Wikipedia for foreign
+    // listings Finnhub has no profile for.
     const [info, history] = primary
-      ? await Promise.all([fetchCompanyInfo(env, primary.ticker), fetchRecentCloses(primary.ticker)])
+      ? await Promise.all([fetchCompanyInfo(env, primary.ticker, primary.name), fetchRecentCloses(primary.ticker)])
       : ['', ''];
     const quotes = results
       .filter(r => r.d && r.d.c > 0)
