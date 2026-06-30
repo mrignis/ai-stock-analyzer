@@ -3,6 +3,18 @@
 // Secrets: wrangler secret put GROQ_KEY       (chat/analyze engine)
 //          wrangler secret put OLLAMA_API_KEY  (company web search only)
 //          wrangler secret put FINNHUB_KEY
+//
+// Layout (one file on purpose — trivial deploy):
+//   1. Config + AI engine .......... callAI / aiRequest / aiErrorResponse
+//   2. Rate limiting ............... rateLimited (20/min/IP on /analyze + /chat)
+//   3. Data tables ................. CRYPTO_MAP, NAME_TO_TICKER, CYRILLIC_NAMES, FX_STATIC, SKIP_WORDS
+//   4. Shared helpers .............. fetchT, parseTicker, *Quote, getLivePrice, fetchCompanyInfo,
+//                                    wikiSummary, webSearch, yahoo* , resolveTickerByName
+//   5. Endpoint handlers ........... handleMarket / handlePrice / handleAnalyze / handleNews /
+//                                    handleMarketNews / handleCandle / handleChat / handleFx
+//   6. Small helpers ............... json / getToday / getDateDaysAgo
+//   7. Router ...................... export default { fetch } at the bottom
+// (Behaviour is covered by tests/run.mjs — 23 behavioural cases — and tests/stress.mjs.)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
