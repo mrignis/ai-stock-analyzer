@@ -100,9 +100,11 @@ async function main() {
     // star the AAPL row
     await page.locator('.watch-star[data-ticker="AAPL"]').first().click();
     await page.screenshot({ path: `${SHOTS}/j5-watchlist.png` });
-    // home should now show AAPL as a pinned tile
-    await page.click('#tab-search');
-    await page.waitForSelector('.hwl-item[data-ticker="AAPL"]', { timeout: 6000 });
+    // Back to the HOME view via the logo — #tab-search alone keeps the last
+    // analysis result on screen, which hides the home watchlist block. The logo
+    // clears the result and shows the home list where pinned tiles live.
+    await page.click('#nav-logo');
+    await page.waitForSelector('.hwl-item[data-ticker="AAPL"]', { state: 'visible', timeout: 8000 });
     await page.screenshot({ path: `${SHOTS}/j6-home-pinned.png` });
     pass('watchlist→star→home', `${items} items, AAPL pinned to home`);
   } catch (e) { fail('watchlist→star→home', e.message); await page.screenshot({ path: `${SHOTS}/j5-FAIL.png` }); }
