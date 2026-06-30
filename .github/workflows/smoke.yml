@@ -25,6 +25,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run popup smoke test (xvfb for headed extension load)
         run: xvfb-run -a node .github/smoke.mjs
+      - name: Run user-journey test (name/foreign/crypto, star→home, multi-turn chat)
+        run: xvfb-run -a node .github/journey.mjs
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
