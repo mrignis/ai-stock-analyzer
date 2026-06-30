@@ -614,7 +614,9 @@ async function handlePrice(request, env) {
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
 async function handleAnalyze(request, env, ctx) {
-  const { ticker, lang } = await request.json();
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  const { ticker, lang } = body || {};
   if (!ticker) return json({ error: 'Missing ticker' }, 400);
 
   // Edge cache: the AI verdict for a given ticker+lang is identical for everyone
@@ -919,7 +921,9 @@ const CYR_SKIP = new Set([
 ]);
 
 async function handleChat(request, env) {
-  const { messages, context, lang, currency: userCurrency, fxRate: userFxRate } = await request.json();
+  let parsed;
+  try { parsed = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  const { messages, context, lang, currency: userCurrency, fxRate: userFxRate } = parsed || {};
   if (!messages || !messages.length) return json({ error: 'No messages' }, 400);
 
   // Server-side limit — client enforces 40 but direct POST calls bypass it
@@ -1089,11 +1093,15 @@ async function handleFx(request) {
   try {
     const r = await fetchT('https://open.er-api.com/v6/latest/USD');
     const d = r.ok ? await r.json() : null;
-    const rate = d && d.rates && d.rates[to];
-    if (rate > 0) return json({ rate, source: 'er-api' });
+    if (d && d.rates) {
+      if (d.rates[to] > 0) return json({ rate: d.rates[to], source: 'er-api' });
+      // er-api answered with the full currency table but has no such code →
+      // it's not a real currency (e.g. "ZZZ"), a client error, not a gateway fault.
+      if (!(to in FX_STATIC)) return json({ error: 'Unknown currency' }, 400);
+    }
   } catch { /* fall through to static */ }
   if (to in FX_STATIC) return json({ rate: FX_STATIC[to], source: 'static' });
-  return json({ error: 'Rate unavailable' }, 502);
+  return json({ error: 'Rate unavailable' }, 502); // real upstream failure for a valid code
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
