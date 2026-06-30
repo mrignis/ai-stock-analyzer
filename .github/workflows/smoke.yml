@@ -1,0 +1,34 @@
+name: popup smoke test
+
+# Clicks through the extension popup (analyze, watchlist+star, chat, language) in a
+# real Chromium with the unpacked extension loaded. Runs on Ubuntu where Playwright
+# loads extensions out of the box. Hits the live worker, so it's an end-to-end check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Playwright + Chromium
+        run: |
+          npm init -y
+          npm i playwright
+          npx playwright install --with-deps chromium
+      - name: Run popup smoke test (xvfb for headed extension load)
+        run: xvfb-run -a node .github/smoke.mjs
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-shots
+          path: smoke-shots/
+          if-no-files-found: ignore

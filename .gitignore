@@ -1,4 +1,7 @@
 node_modules/
+smoke-shots/
+package.json
+package-lock.json
 .wrangler/
 .dev.vars
 *.env
