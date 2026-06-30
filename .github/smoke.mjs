@@ -39,6 +39,10 @@ async function main() {
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
   page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
+  // Screenshots are diagnostics, not assertions — never let a capture hiccup
+  // (xvfb surface quirks) fail the run. Wrap once so all calls are best-effort.
+  const _ss = page.screenshot.bind(page);
+  page.screenshot = async (o) => { try { return await _ss(o); } catch (e) { console.log('  (screenshot skipped: ' + e.message.slice(0, 50) + ')'); } };
 
   await page.goto(`chrome-extension://${extId}/popup.html`);
   await page.setViewportSize({ width: 420, height: 640 });

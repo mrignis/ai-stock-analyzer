@@ -54,6 +54,9 @@ async function main() {
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   page.on('pageerror', e => errs.push('pageerror: ' + e.message));
+  // Best-effort screenshots — a capture hiccup (xvfb) must not fail the run.
+  const _ss = page.screenshot.bind(page);
+  page.screenshot = async (o) => { try { return await _ss(o); } catch (e) { console.log('  (screenshot skipped: ' + e.message.slice(0, 50) + ')'); } };
   await page.goto(`chrome-extension://${extId}/popup.html`);
   await page.setViewportSize({ width: 420, height: 700 });
   await page.waitForSelector('#ticker-input', { timeout: 15000 });
