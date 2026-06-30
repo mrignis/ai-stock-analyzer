@@ -41,9 +41,14 @@ async function main() {
     headless: false,
     args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--no-sandbox'],
   });
-  let sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 15000 }).catch(() => null);
-  if (!sw) { console.log('  FAIL extension did not load'); await context.close(); process.exit(2); }
-  const extId = sw.url().split('/')[2];
+  // Poll for the MV3 service worker (cold CI runner can need >15s to register).
+  let extId = null;
+  for (let i = 0; i < 30 && !extId; i++) {
+    const s = context.serviceWorkers()[0];
+    if (s) extId = s.url().split('/')[2];
+    else await new Promise(r => setTimeout(r, 1000));
+  }
+  if (!extId) { console.log('  FAIL extension did not load'); await context.close(); process.exit(2); }
   console.log(`\n  AI Stock Analyzer — user journey  (ext ${extId})\n`);
 
   const page = await context.newPage();
@@ -51,7 +56,7 @@ async function main() {
   page.on('pageerror', e => errs.push('pageerror: ' + e.message));
   await page.goto(`chrome-extension://${extId}/popup.html`);
   await page.setViewportSize({ width: 420, height: 700 });
-  await page.waitForSelector('#ticker-input', { timeout: 8000 });
+  await page.waitForSelector('#ticker-input', { timeout: 15000 });
 
   // 1) Home renders market cards + news
   try {

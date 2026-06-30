@@ -25,10 +25,15 @@ async function main() {
     args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--no-sandbox'],
   });
 
-  let sw = context.serviceWorkers()[0];
-  if (!sw) { try { sw = await context.waitForEvent('serviceworker', { timeout: 15000 }); } catch { /* lazy */ } }
-  if (!sw) { console.log('  FAIL extension service worker never started — extension did not load'); await context.close(); process.exit(2); }
-  const extId = sw.url().split('/')[2];
+  // Poll for the MV3 service worker — on a cold CI runner it can take >15s to
+  // register, so retry for up to 30s instead of failing on the first miss (flaky).
+  let extId = null;
+  for (let i = 0; i < 30 && !extId; i++) {
+    const s = context.serviceWorkers()[0];
+    if (s) extId = s.url().split('/')[2];
+    else await new Promise(r => setTimeout(r, 1000));
+  }
+  if (!extId) { console.log('  FAIL extension service worker never started — extension did not load'); await context.close(); process.exit(2); }
   console.log(`\n  AI Stock Analyzer — popup smoke test  (ext ${extId})\n`);
 
   const page = await context.newPage();
@@ -37,7 +42,7 @@ async function main() {
 
   await page.goto(`chrome-extension://${extId}/popup.html`);
   await page.setViewportSize({ width: 420, height: 640 });
-  await page.waitForSelector('#ticker-input', { timeout: 8000 });
+  await page.waitForSelector('#ticker-input', { timeout: 15000 });
   await page.screenshot({ path: `${SHOTS}/1-home.png` });
   pass('popup loads');
 
