@@ -158,12 +158,11 @@ function pillClass(color) {
 // Unified "time ago" — long=true adds "тому" suffix (for alerts/news)
 function timeAgo(ts, long) {
   var diff = Math.floor((Date.now() - ts) / 60000);
-  var ua = lang === 'ua';
-  var suf = long ? (ua ? ' тому' : '') : '';
-  if (diff < 1)    return ua ? 'щойно' : 'just now';
-  if (diff < 60)   return diff + (ua ? (' хв' + suf) : 'm ago');
-  if (diff < 1440) return Math.floor(diff / 60) + (ua ? (' год' + suf) : 'h ago');
-  return Math.floor(diff / 1440) + (ua ? (' д' + suf) : 'd ago');
+  var suf = long && lang === 'ua' ? ' тому' : '';
+  if (diff < 1)    return L('щойно', 'just now', "à l'instant");
+  if (diff < 60)   return diff + L(' хв' + suf, 'm ago', ' min');
+  if (diff < 1440) return Math.floor(diff / 60) + L(' год' + suf, 'h ago', ' h');
+  return Math.floor(diff / 1440) + L(' д' + suf, 'd ago', ' j');
 }
 
 // Escape HTML — shared by chat (renderConvList) and news (XSS protection)

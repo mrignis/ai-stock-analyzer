@@ -38,7 +38,7 @@ function fetchRealChart(ticker, color) {
   cacheGet('candle_' + ticker, CACHE_CANDLE_TTL, function(cached) {
     if (cached) {
       drawChartFromPrices(cached, color);
-      if (lbl) lbl.textContent = (lang === 'ua' ? 'Реальні дані 30д' : 'Real data 30d');
+      if (lbl) lbl.textContent = (L('Реальні дані 30д', 'Real data 30d', 'Données réelles 30j'));
       return;
     }
     fetch(WORKER_URL + '/candle?ticker=' + ticker)
@@ -47,15 +47,15 @@ function fetchRealChart(ticker, color) {
         if (d.c && d.c.length >= 2) {
           cacheSet('candle_' + ticker, d.c);
           drawChartFromPrices(d.c, color);
-          if (lbl) lbl.textContent = (lang === 'ua' ? 'Реальні дані 30д' : 'Real data 30d');
+          if (lbl) lbl.textContent = (L('Реальні дані 30д', 'Real data 30d', 'Données réelles 30j'));
         } else {
           drawChartSimulated(currentData ? currentData.dir : 'flat', color);
-          if (lbl) lbl.textContent = (lang === 'ua' ? 'Тренд (прогноз)' : 'Trend (forecast)');
+          if (lbl) lbl.textContent = (L('Тренд (прогноз)', 'Trend (forecast)', 'Tendance (prévision)'));
         }
       })
       .catch(function() {
         drawChartSimulated(currentData ? currentData.dir : 'flat', color);
-        if (lbl) lbl.textContent = (lang === 'ua' ? 'Тренд (прогноз)' : 'Trend (forecast)');
+        if (lbl) lbl.textContent = (L('Тренд (прогноз)', 'Trend (forecast)', 'Tendance (prévision)'));
       });
   });
 }

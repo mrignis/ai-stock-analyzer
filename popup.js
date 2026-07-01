@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-save-threshold').addEventListener('click', function() {
       var val = parseInt(document.getElementById('threshold-slider').value);
       chrome.storage.local.set({ alertThreshold: val }, function() {
-        toast(lang === 'ua' ? '✓ Поріг збережено: ' + val + '%' : '✓ Threshold saved: ' + val + '%');
+        toast(L('✓ Поріг збережено: ' + val + '%', '✓ Threshold saved: ' + val + '%', '✓ Seuil enregistré : ' + val + '%'));
       });
     });
     document.getElementById('btn-add-target').addEventListener('click', addPriceTarget);
@@ -161,9 +161,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-check-now').addEventListener('click', function() {
       chrome.runtime.sendMessage({ action: 'checkNow' }, function() {
         var btn = document.getElementById('btn-check-now');
-        btn.textContent = lang === 'ua' ? '✓ Перевірено' : '✓ Checked';
+        btn.textContent = L('✓ Перевірено', '✓ Checked', '✓ Vérifié');
         setTimeout(function() {
-          btn.textContent = lang === 'ua' ? '↻ Перевірити' : '↻ Check now';
+          btn.textContent = L('↻ Перевірити', '↻ Check now', '↻ Vérifier');
           // Refresh prices AND targets — fired one-shot targets disappear from the list
           initAlerts();
         }, 1500);

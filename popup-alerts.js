@@ -50,8 +50,7 @@ function initAlerts() {
 function setNotifToggle(enabled) {
   var btn = document.getElementById('notif-toggle');
   if (!btn) return;
-  var ua = lang === 'ua';
-  btn.textContent = enabled ? (ua ? 'Увімкнено' : 'On') : (ua ? 'Вимкнено' : 'Off');
+  btn.textContent = enabled ? L('Увімкнено', 'On', 'Activé') : L('Вимкнено', 'Off', 'Désactivé');
   btn.style.color = enabled ? 'var(--green)' : 'var(--dim)';
 }
 
@@ -60,10 +59,9 @@ function toggleNotifications() {
     var enabled = (s.notificationsEnabled === false); // currently off -> turn on, else off
     chrome.storage.local.set({ notificationsEnabled: enabled }, function() {
       setNotifToggle(enabled);
-      var ua = lang === 'ua';
       toast(enabled
-        ? (ua ? '🔔 Сповіщення увімкнено' : '🔔 Notifications on')
-        : (ua ? '🔕 Сповіщення вимкнено' : '🔕 Notifications off'));
+        ? L('🔔 Сповіщення увімкнено', '🔔 Notifications on', '🔔 Notifications activées')
+        : L('🔕 Сповіщення вимкнено', '🔕 Notifications off', '🔕 Notifications désactivées'));
     });
   });
 }
@@ -74,7 +72,7 @@ function addPriceTarget() {
   var dir    = document.getElementById('target-dir').value;
   var price  = parseFloat(document.getElementById('target-price').value.replace(',', '.').replace('$', ''));
   if (!ticker || isNaN(price) || price <= 0) {
-    toast(lang === 'ua' ? '⚠ Вкажи тікер і ціну' : '⚠ Enter ticker and price');
+    toast(L('⚠ Вкажи тікер і ціну', '⚠ Enter ticker and price', '⚠ Saisissez un symbole et un prix'));
     return;
   }
   chrome.storage.local.get(['priceTargets'], function(s) {
@@ -104,8 +102,8 @@ function renderTargets(targets) {
   targets.forEach(function(t, i) {
     var arrow = t.dir === 'below' ? '↓' : '↑';
     var word  = t.dir === 'below'
-      ? (lang === 'ua' ? 'нижче' : 'below')
-      : (lang === 'ua' ? 'вище' : 'above');
+      ? L('нижче', 'below', 'sous')
+      : L('вище', 'above', 'au-dessus');
     html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:var(--r);padding:8px 12px;margin-bottom:6px">' +
       '<span style="font-family:var(--mono);font-size:12px;color:var(--green);width:56px">' + t.ticker + '</span>' +
       '<span style="font-family:var(--mono);font-size:11px;color:var(--text)">' + arrow + ' ' + word + ' $' + t.price + '</span>' +
@@ -123,10 +121,10 @@ function renderTargets(targets) {
 function renderAlertPrices(priceAlerts) {
   var el = document.getElementById('alert-prices-list');
   if (!watchlist.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>' + (lang === 'ua' ? 'Додай акції у Watchlist.' : 'Add stocks to Watchlist.') + '</p></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>' + (L('Додай акції у Watchlist.', 'Add stocks to Watchlist.', 'Ajoutez des actions à la Liste.')) + '</p></div>';
     return;
   }
-  var html = '<div style="margin-top:12px"><p style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">' + (lang === 'ua' ? 'Останні ціни' : 'Last prices') + '</p>';
+  var html = '<div style="margin-top:12px"><p style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">' + (L('Останні ціни', 'Last prices', 'Derniers prix')) + '</p>';
   watchlist.forEach(function(w) {
     var info = priceAlerts[w.ticker];
     var pill = pillClass(w.color);
@@ -139,10 +137,10 @@ function renderAlertPrices(priceAlerts) {
       html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + fmtMoney(info.price) + '</span>';
       html += '<span style="font-family:var(--mono);font-size:11px;color:' + color + '">' + arrow + ' ' + (up ? '+' : '') + info.pct.toFixed(1) + '%</span>';
       var ago = Math.floor((Date.now() - info.time) / 60000);
-      var timeStr = ago < 1 ? (lang === 'ua' ? 'щойно' : 'just now') : ago + (lang === 'ua' ? ' хв тому' : 'm ago');
+      var timeStr = ago < 1 ? L('щойно', 'just now', "à l'instant") : ago + L(' хв тому', 'm ago', ' min');
       html += '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">' + timeStr + '</span>';
     } else {
-      html += '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + (lang === 'ua' ? 'ще не перевірено' : 'not checked yet') + '</span>';
+      html += '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + (L('ще не перевірено', 'not checked yet', 'pas encore vérifié')) + '</span>';
     }
     html += '</div>';
   });

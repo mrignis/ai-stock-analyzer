@@ -50,7 +50,7 @@ function fetchNews(ticker) {
   var emptyEl = document.getElementById('news-empty');
   listEl.style.display = 'none';
   emptyEl.style.display = 'block';
-  document.getElementById('lbl-news-empty').textContent = lang === 'ua' ? 'Завантаження...' : 'Loading...';
+  document.getElementById('lbl-news-empty').textContent = L('Завантаження...', 'Loading...', 'Chargement...');
 
   cacheGet('news_' + ticker, CACHE_NEWS_TTL, function(cached) {
     if (cached) { renderNews(ticker, cached); return; }
@@ -71,9 +71,7 @@ function renderNews(ticker, articles) {
   if (!articles.length) {
     listEl.style.display = 'none';
     emptyEl.style.display = 'block';
-    document.getElementById('lbl-news-empty').textContent = lang === 'ua'
-      ? 'Новин не знайдено для ' + ticker
-      : 'No news found for ' + ticker;
+    document.getElementById('lbl-news-empty').textContent = L('Новин не знайдено для ' + ticker, 'No news found for ' + ticker, 'Aucune actualité pour ' + ticker);
     return;
   }
 
@@ -91,7 +89,7 @@ function renderNews(ticker, articles) {
       '<div class="news-meta"><span>' + src + '</span><span>' + ago + '</span></div>' +
       '<div class="news-headline">' + headline + '</div>' +
       (summary ? '<div class="news-summary">' + summary + '</div>' : '') +
-      (n.url ? '<div class="news-read">' + (lang === 'ua' ? 'Читати статтю →' : 'Read article →') + '</div>' : '') +
+      (n.url ? '<div class="news-read">' + (L('Читати статтю →', 'Read article →', "Lire l'article →")) + '</div>' : '') +
     '</div>';
   });
   listEl.innerHTML = html;
@@ -150,7 +148,7 @@ function renderMarketNews(articles) {
 function timeAgoNews(ts) {
   if (!ts) return '';
   var diff = Math.max(0, Math.floor((Date.now() / 1000 - ts) / 60));
-  if (diff < 60)   return diff + (lang === 'ua' ? ' хв тому' : 'm ago');
-  if (diff < 1440) return Math.floor(diff / 60) + (lang === 'ua' ? ' год тому' : 'h ago');
-  return Math.floor(diff / 1440) + (lang === 'ua' ? ' дн тому' : 'd ago');
+  if (diff < 60)   return diff + (L(' хв тому', 'm ago', ' min'));
+  if (diff < 1440) return Math.floor(diff / 60) + (L(' год тому', 'h ago', ' h'));
+  return Math.floor(diff / 1440) + (L(' дн тому', 'd ago', ' j'));
 }

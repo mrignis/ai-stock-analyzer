@@ -30,7 +30,7 @@ function newChat() {
 
   // Create new conversation
   var id = Date.now();
-  var conv = { id: id, title: lang === 'ua' ? 'Новий діалог' : 'New chat', messages: [], date: id };
+  var conv = { id: id, title: L('Новий діалог', 'New chat', 'Nouveau chat'), messages: [], date: id };
   conversations.unshift(conv);
   currentConvId = id;
   chatHistory = [];
@@ -38,7 +38,7 @@ function newChat() {
   // Reset UI
   document.getElementById('chat-conv-title').textContent = conv.title;
   document.getElementById('chat-messages').innerHTML =
-    welcomeHtml(lang === 'ua' ? 'Привіт! Запитай мене про будь-яку акцію або ринок.' : 'Hi! Ask me about any stock or market.');
+    welcomeHtml(L('Привіт! Запитай мене про будь-яку акцію або ринок.', 'Hi! Ask me about any stock or market.', 'Bonjour ! Posez-moi une question sur une action ou le marché.'));
 
   // Hide conv list if visible
   if (convListVisible) toggleConvList();
@@ -67,7 +67,7 @@ function toggleConvList() {
 function renderConvList() {
   var el = document.getElementById('conv-list');
   if (!conversations.length) {
-    el.innerHTML = '<div class="conv-empty">' + (lang === 'ua' ? 'Немає збережених діалогів' : 'No saved conversations') + '</div>';
+    el.innerHTML = '<div class="conv-empty">' + (L('Немає збережених діалогів', 'No saved conversations', 'Aucune conversation enregistrée')) + '</div>';
     return;
   }
   var html = '';
@@ -75,7 +75,7 @@ function renderConvList() {
     var ago = timeSince(c.date);
     var isCurrent = c.id === currentConvId;
     html += '<div class="conv-item' + (isCurrent ? ' current' : '') + '" data-id="' + c.id + '">' +
-      '<div class="conv-info"><div class="conv-title">' + escHtml(c.title) + '</div><div class="conv-date">' + ago + ' · ' + c.messages.length + (lang === 'ua' ? ' повід.' : ' msg') + '</div></div>' +
+      '<div class="conv-info"><div class="conv-title">' + escHtml(c.title) + '</div><div class="conv-date">' + ago + ' · ' + c.messages.length + (L(' повід.', ' msg', ' msg')) + '</div></div>' +
       '<button class="conv-del" data-id="' + c.id + '">🗑</button>' +
     '</div>';
   });
@@ -108,7 +108,7 @@ function loadConversation(id) {
   document.getElementById('chat-messages').innerHTML = '';
   if (chatHistory.length === 0) {
     document.getElementById('chat-messages').innerHTML =
-      welcomeHtml(lang === 'ua' ? 'Продовжуй діалог...' : 'Continue the conversation...');
+      welcomeHtml(L('Продовжуй діалог...', 'Continue the conversation...', 'Continuez la conversation...'));
   } else {
     chatHistory.forEach(function(msg) {
       appendChatMsg(msg.role === 'assistant' ? 'ai' : 'user', msg.content);
@@ -128,7 +128,7 @@ function deleteConversation(id) {
     } else {
       currentConvId = null;
       chatHistory = [];
-      document.getElementById('chat-conv-title').textContent = lang === 'ua' ? 'Новий діалог' : 'New chat';
+      document.getElementById('chat-conv-title').textContent = L('Новий діалог', 'New chat', 'Nouveau chat');
     }
   }
   saveConversations();
@@ -174,7 +174,7 @@ function sendChat() {
   appendChatMsg('user', msg);
   chatHistory.push({ role: 'user', content: msg });
 
-  var typingEl = appendChatMsg('ai', lang === 'ua' ? 'Думаю...' : 'Thinking...', true);
+  var typingEl = appendChatMsg('ai', L('Думаю...', 'Thinking...', 'Réflexion...'), true);
 
   fetch(WORKER_URL + '/chat', {
     method: 'POST',
@@ -185,9 +185,7 @@ function sendChat() {
     .then(function(txt) {
       try { return JSON.parse(txt); }
       catch (_) {
-        throw new Error(lang === 'ua'
-          ? 'Сервер тимчасово недоступний. Спробуй ще раз за хвилину.'
-          : 'Server temporarily unavailable. Try again in a minute.');
+        throw new Error(L('Сервер тимчасово недоступний. Спробуй ще раз за хвилину.', 'Server temporarily unavailable. Try again in a minute.', 'Serveur temporairement indisponible. Réessayez dans une minute.'));
       }
     })
     .then(function(data) {
@@ -197,13 +195,11 @@ function sendChat() {
         var retryMatch = errMsg.match(/retry in ([\d.]+)s/i);
         if (errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('exhausted')) {
           var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
-          errMsg = lang === 'ua'
-            ? '⏳ Перевищено ліміт запитів. Спробуй через ' + sec + ' сек.'
-            : '⏳ Rate limit reached. Try again in ' + sec + ' sec.';
+          errMsg = L('⏳ Перевищено ліміт запитів. Спробуй через ' + sec + ' сек.', '⏳ Rate limit reached. Try again in ' + sec + ' sec.', '⏳ Limite de requêtes atteinte. Réessayez dans ' + sec + ' s.');
         }
         appendChatMsg('ai', errMsg);
       } else {
-        var reply = data.reply || (lang === 'ua' ? 'Порожня відповідь.' : 'Empty response.');
+        var reply = data.reply || (L('Порожня відповідь.', 'Empty response.', 'Réponse vide.'));
         appendChatMsg('ai', reply);
         chatHistory.push({ role: 'assistant', content: reply });
         if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
@@ -213,7 +209,7 @@ function sendChat() {
     .catch(function(e) {
       typingEl.remove();
       if (!(e && e.name === 'AbortError')) {
-        appendChatMsg('ai', '⚠ ' + (e && e.message ? e.message : (lang === 'ua' ? 'Помилка зв\'язку.' : 'Connection error.')));
+        appendChatMsg('ai', '⚠ ' + (e && e.message ? e.message : (L('Помилка зв\'язку.', 'Connection error.', 'Erreur de connexion.'))));
       }
     })
     .finally(function() {
