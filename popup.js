@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('lang-btn').addEventListener('click', function() {
-      lang = lang === 'ua' ? 'en' : 'ua';
+      lang = lang === 'ua' ? 'en' : lang === 'en' ? 'fr' : 'ua'; // cycle UA→EN→FR
       save({ lang: lang });
       applyLang();
       renderWatchlist();
@@ -273,26 +273,60 @@ var I18N_LABELS = [
   ['btn-conv-list', 'Діалоги', 'Conversations', 'title']
 ];
 
+// French UI strings keyed by element id — added alongside the ua/en columns in
+// I18N_LABELS so a third language needs one dictionary, not a rewrite of every
+// tuple. Missing keys fall back to English.
+var FR_LABELS = {
+  'lang-btn': 'FR',
+  'tab-search': 'Recherche', 'tab-watchlist': 'Liste', 'tab-history': 'Historique',
+  'analyze-btn': 'Analyser', 'lbl-popular': 'Populaires :', 'lbl-market': 'Marché',
+  'lbl-home-wl': 'Liste', 'lbl-home-news': 'Actualités du marché',
+  'r-disclaimer': 'Pas un conseil financier.', 'lbl-sector': 'Secteur', 'lbl-risk': 'Risque',
+  'lbl-trend': 'Tendance', 'lbl-for': 'Idéal pour', 'lbl-chart': 'Tendance (30j)',
+  'lbl-what': "Ce que fait l'entreprise", 'lbl-risks': 'Risques clés',
+  'lbl-forecast': 'Prévision IA', 'lbl-conclusion': 'Conclusion IA',
+  'wl-tab-pf': '💼 Portefeuille', 'lbl-add-position': 'Ajouter une position', 'pf-add-btn': '+ Ajouter',
+  'lbl-history-title': 'Historique des recherches', 'btn-clear': 'Effacer',
+  'lbl-alerts-title': 'Alertes de prix', 'lbl-notif': '🔔 Notifications',
+  'alerts-info': 'Recevez une alerte quand une action de la Liste varie de plus du % défini.',
+  'threshold-label': "Seuil d'alerte (% de variation) :", 'target-label': '🎯 Objectifs de prix :',
+  'btn-add-target': '+ Ajouter un objectif', 'btn-save-threshold': 'Enregistrer', 'btn-check-now': '↻ Vérifier',
+  'lbl-chat-welcome': 'Bonjour ! Posez-moi une question sur une action ou le marché.',
+  'news-search-btn': 'Recherche', 'lbl-news-empty': 'Saisissez un symbole ou choisissez dans la liste',
+  'stop-btn': '✕ Stop', 'lbl-bmac': 'Soutenir le projet', 'lbl-currency': '💱 Devise des prix',
+  'lbl-pin': '📌 Ouvrir dans une fenêtre', 'btn-pin-tab': '↗ Ouvrir',
+  'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
+  'chat-input': 'Posez une question sur TSLA, le marché...',
+  'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
+};
+
+// 3-language string pick: L(ua, en, fr). `lang` is the global code; fr falls back
+// to en when not supplied. Used everywhere a UI string was a ua/en ternary.
+function L(ua, en, fr) { return lang === 'fr' ? (fr != null ? fr : en) : lang === 'ua' ? ua : en; }
+
 function applyLang() {
   var ua = lang === 'ua';
 
   // Data-driven labels — one loop replaces ~45 repetitive getElementById lines.
   // Each element is guarded, so a renamed/removed ID is skipped instead of
-  // throwing and breaking init.
+  // throwing and breaking init. French comes from FR_LABELS (fallback: English).
   for (var i = 0; i < I18N_LABELS.length; i++) {
-    var el = document.getElementById(I18N_LABELS[i][0]);
-    if (el) el[I18N_LABELS[i][3] || 'textContent'] = ua ? I18N_LABELS[i][1] : I18N_LABELS[i][2];
+    var row = I18N_LABELS[i];
+    var el = document.getElementById(row[0]);
+    if (!el) continue;
+    var val = lang === 'fr' ? (FR_LABELS[row[0]] != null ? FR_LABELS[row[0]] : row[2]) : (ua ? row[1] : row[2]);
+    el[row[3] || 'textContent'] = val;
   }
 
-  // ── Special cases (more than a plain ua/en text swap) ──
+  // ── Special cases (more than a plain table lookup) ──
   var tdSel = document.getElementById('target-dir');
-  tdSel.options[0].text = ua ? 'впаде нижче' : 'falls below';
-  tdSel.options[1].text = ua ? 'зросте вище' : 'rises above';
+  tdSel.options[0].text = L('впаде нижче', 'falls below', 'chute sous');
+  tdSel.options[1].text = L('зросте вище', 'rises above', 'monte au-dessus');
 
   // Update conv title if it's a default one
   var titleEl = document.getElementById('chat-conv-title');
-  if (titleEl.textContent === 'Новий діалог' || titleEl.textContent === 'New chat') {
-    titleEl.textContent = ua ? 'Новий діалог' : 'New chat';
+  if (['Новий діалог', 'New chat', 'Nouveau chat'].indexOf(titleEl.textContent) !== -1) {
+    titleEl.textContent = L('Новий діалог', 'New chat', 'Nouveau chat');
   }
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
@@ -301,12 +335,12 @@ function applyLang() {
   // Theme labels depend on BOTH theme and language
   var lblTheme = document.getElementById('lbl-theme');
   if (lblTheme) lblTheme.textContent = theme === 'light'
-    ? (ua ? '☀️ Світла тема' : '☀️ Light theme')
-    : (ua ? '🌙 Темна тема' : '🌙 Dark theme');
+    ? L('☀️ Світла тема', '☀️ Light theme', '☀️ Thème clair')
+    : L('🌙 Темна тема', '🌙 Dark theme', '🌙 Thème sombre');
   var themeToggle = document.getElementById('theme-toggle');
   if (themeToggle) themeToggle.textContent = theme === 'light'
-    ? (ua ? '🌙 Темна' : '🌙 Dark')
-    : (ua ? '☀️ Світла' : '☀️ Light');
+    ? L('🌙 Темна', '🌙 Dark', '🌙 Sombre')
+    : L('☀️ Світла', '☀️ Light', '☀️ Clair');
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────

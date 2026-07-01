@@ -154,8 +154,8 @@ function isInWatch(t) { for (var i = 0; i < watchlist.length; i++) if (watchlist
 function updateWatchBtn() {
   var btn = document.getElementById('watch-btn');
   if (!currentTicker) return;
-  if (isInWatch(currentTicker)) { btn.textContent = lang === 'ua' ? '✓ В списку' : '✓ Added'; btn.classList.add('added'); }
-  else { btn.textContent = lang === 'ua' ? '+ Список' : '+ Watchlist'; btn.classList.remove('added'); }
+  if (isInWatch(currentTicker)) { btn.textContent = L('✓ В списку', '✓ Added', '✓ Ajouté'); btn.classList.add('added'); }
+  else { btn.textContent = L('+ Список', '+ Watchlist', '+ Liste'); btn.classList.remove('added'); }
 }
 function toggleWatch() {
   if (!currentTicker || !currentData) return;
@@ -166,12 +166,12 @@ function toggleWatch() {
 function renderWatchlist() {
   var el = document.getElementById('watchlist-content');
   if (!watchlist.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + (lang === 'ua' ? 'Список порожній.' : 'Watchlist is empty.') + '</p></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>' + L('Список порожній.', 'Watchlist is empty.', 'Liste vide.') + '</p></div>';
     return;
   }
   // Hint so users discover the star picks what shows on the home screen.
   var html = '<div style="font-size:10px;color:var(--muted);padding:2px 4px 8px;font-family:var(--mono)">' +
-    (lang === 'ua' ? '★ — обрати для головної' : '★ — pick for home screen') + '</div>';
+    L('★ — обрати для головної', '★ — pick for home screen', "★ — choisir pour l'accueil") + '</div>';
   for (var i = 0; i < watchlist.length; i++) {
     var w = watchlist[i];
     var pill = pillClass(w.color);
@@ -179,7 +179,7 @@ function renderWatchlist() {
     // Gold filled / clearly-visible empty star — the old var(--dim) ☆ was almost
     // invisible on the dark background, so users never noticed they could pick
     // which stocks show on home (Pylyp). Brighter + bigger so it reads as a toggle.
-    var starTitle = lang === 'ua' ? 'Показувати на головній' : 'Show on home screen';
+    var starTitle = L('Показувати на головній', 'Show on home screen', "Afficher sur l'accueil");
     html += '<div class="watch-item" data-ticker="' + w.ticker + '">' +
       '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
         'style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:0 5px;color:' + (w.home ? 'var(--yellow)' : 'var(--muted)') + '">' + star + '</button>' +
@@ -240,15 +240,15 @@ function addHistory(ticker, data) {
 }
 function renderHistory() {
   var el = document.getElementById('history-content');
-  if (!historyList.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🕐</div><p>' + (lang === 'ua' ? 'Історія порожня.' : 'History is empty.') + '</p></div>'; return; }
+  if (!historyList.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🕐</div><p>' + L('Історія порожня.', 'History is empty.', 'Historique vide.') + '</p></div>'; return; }
   var html = '';
   for (var i = 0; i < historyList.length; i++) {
     var h = historyList[i]; var pill = pillClass(h.color);
     var diff = Math.floor((Date.now() - h.t) / 60000);
-    var time = diff < 1    ? (lang === 'ua' ? 'Щойно' : 'Just now')
-             : diff < 60   ? diff + (lang === 'ua' ? ' хв' : 'm ago')
-             : diff < 1440 ? Math.floor(diff / 60) + (lang === 'ua' ? ' год' : 'h ago')
-             : Math.floor(diff / 1440) + (lang === 'ua' ? ' д' : 'd ago');
+    var time = diff < 1    ? L('Щойно', 'Just now', "À l'instant")
+             : diff < 60   ? diff + L(' хв', 'm ago', ' min')
+             : diff < 1440 ? Math.floor(diff / 60) + L(' год', 'h ago', ' h')
+             : Math.floor(diff / 1440) + L(' д', 'd ago', ' j');
     html += '<div class="hist-item" data-ticker="' + h.ticker + '"><span class="hist-ticker">' + h.ticker + '</span><span class="hist-time">' + time + '</span><span class="verdict-pill ' + pill + '">' + normalizeVerdict(h.verdict || '', lang) + '</span></div>';
   }
   el.innerHTML = html;

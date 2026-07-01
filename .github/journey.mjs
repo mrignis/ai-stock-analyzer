@@ -125,15 +125,19 @@ async function main() {
     pass('chat multi-turn (2 replies)');
   } catch (e) { fail('chat multi-turn (2 replies)', e.message); await page.screenshot({ path: `${SHOTS}/j7-FAIL.png` }); }
 
-  // 7) Language toggle re-localizes
+  // 7) Language cycles UA→EN→FR — click until the French label lands (proves
+  // FR_LABELS + applyLang localize the UI in a real browser, not just the AI).
   try {
     await page.click('#tab-search');
-    const b = (await page.textContent('#analyze-btn'))?.trim();
-    await page.click('#lang-btn');
-    await page.waitForFunction((x) => document.querySelector('#analyze-btn')?.textContent.trim() !== x, b, { timeout: 4000 });
-    const a = (await page.textContent('#analyze-btn'))?.trim();
-    pass('language toggle', `"${b}" → "${a}"`);
-  } catch (e) { fail('language toggle', e.message); }
+    let fr = null;
+    for (let i = 0; i < 3 && fr !== 'Analyser'; i++) {
+      await page.click('#lang-btn');
+      await page.waitForTimeout(300);
+      fr = (await page.textContent('#analyze-btn'))?.trim();
+    }
+    await page.screenshot({ path: `${SHOTS}/j8-french.png` });
+    fr === 'Analyser' ? pass('language → French UI', `analyze btn = "${fr}"`) : fail('language → French UI', `got "${fr}"`);
+  } catch (e) { fail('language → French UI', e.message); }
 
   await context.close();
 

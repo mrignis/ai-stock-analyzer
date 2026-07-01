@@ -55,7 +55,7 @@ function runAnalysis() {
 
     // No cache — show loading skeleton and fetch
     document.getElementById('loading-state').style.display = 'block';
-    document.getElementById('loading-msg').textContent = (lang === 'ua' ? 'Аналізую ' : 'Analyzing ') + raw + '...';
+    document.getElementById('loading-msg').textContent = L('Аналізую ', 'Analyzing ', 'Analyse de ') + raw + '...';
 
     // Price arrives in ~0.3s — show it immediately while the AI (3-5s)
     // is still thinking, so the screen is never "all skeleton"
@@ -71,9 +71,7 @@ function runAnalysis() {
     setTimeout(function() {
       var msgEl = document.getElementById('loading-msg');
       if (msgEl && document.getElementById('loading-state').style.display !== 'none') {
-        msgEl.textContent = lang === 'ua'
-          ? 'AI перевантажений, ще секунд 20-30...'
-          : 'AI is busy, ~20-30 more seconds...';
+        msgEl.textContent = L('AI перевантажений, ще секунд 20-30...', 'AI is busy, ~20-30 more seconds...', "L'IA est occupée, encore ~20-30 secondes...");
       }
     }, 15000);
     fetch(WORKER_URL + '/analyze', {
@@ -88,9 +86,7 @@ function runAnalysis() {
         // times out — show a human message instead of a JSON parse error
         try { return JSON.parse(txt); }
         catch (_) {
-          throw new Error(lang === 'ua'
-            ? 'Сервер тимчасово недоступний. Спробуй ще раз за хвилину.'
-            : 'Server temporarily unavailable. Try again in a minute.');
+          throw new Error(L('Сервер тимчасово недоступний. Спробуй ще раз за хвилину.', 'Server temporarily unavailable. Try again in a minute.', 'Serveur temporairement indisponible. Réessayez dans une minute.'));
         }
       })
       .then(function(data) {
@@ -113,18 +109,16 @@ function runAnalysis() {
       .catch(function(e) {
         clearTimeout(timeoutId);
         if (e.name === 'AbortError') {
-          showError(lang === 'ua' ? 'Час очікування вийшов. Спробуй ще раз.' : 'Request timed out. Please try again.');
+          showError(L('Час очікування вийшов. Спробуй ще раз.', 'Request timed out. Please try again.', 'Délai dépassé. Veuillez réessayer.'));
           return;
         }
         var msg = e.message || '';
         var retryMatch = msg.match(/retry in ([\d.]+)s/i);
         if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted') || msg.toLowerCase().includes('rate')) {
           var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
-          msg = lang === 'ua'
-            ? '⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.'
-            : '⏳ Rate limit. Try again in ' + sec + ' sec.';
+          msg = L('⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.', '⏳ Rate limit. Try again in ' + sec + ' sec.', '⏳ Limite atteinte. Réessayez dans ' + sec + ' s.');
         }
-        showError(msg || (lang === 'ua' ? 'Помилка з\'єднання' : 'Connection error'));
+        showError(msg || L('Помилка з\'єднання', 'Connection error', 'Erreur de connexion'));
       });
   });
 }
