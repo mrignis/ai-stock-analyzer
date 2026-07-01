@@ -50,6 +50,18 @@ const CRYPTO_NAMES = {
 
 const AI_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but never queued
 
+// Response language. `lang` from the client is a code (en/ua/fr); the AI is told
+// to answer in that language, and /analyze gets localized enum hints so the
+// risk/verdict words come back already in the right language.
+const LANG_NAMES = { en: 'English', ua: 'Ukrainian', fr: 'French' };
+const RISK_HINT = { en: 'High or Medium or Low', ua: 'Високий або Середній або Низький', fr: 'Élevé ou Moyen ou Faible' };
+const VERDICT_HINT = { en: 'one word: Buy or Hold or Sell', ua: 'одне слово: Купувати або Тримати або Продавати', fr: 'un mot: Acheter ou Conserver ou Vendre' };
+function langInstruction(lang) {
+  const name = LANG_NAMES[lang];
+  if (!name || lang === 'en') return 'Respond in English only.';
+  return `IMPORTANT: Respond ENTIRELY in ${name}. Never mix in Chinese, Japanese, Arabic or any other unrelated script. If you catch yourself writing in another language, stop and rewrite in ${name}.`;
+}
+
 async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
   // Primary engine (Llama 3.3 70B, 20s) → on timeout/overload retry with the
   // fast fallback (8B-instant, 12s). User always gets an answer at peak hours.
@@ -766,9 +778,9 @@ ${news || 'No recent news available'}`.trim();
 ${context}
 
 ${thinData ? 'NOTE: No financial profile was available — only the company name, live price, and the company background above (if any). Describe what the company does using that background and the company name itself (e.g. "X Mining Corp" is clearly a mining company — say so, do not write "unknown activity"). You MAY use well-known general knowledge about the company. Do NOT invent specific figures (revenue, market cap, partnerships, dates) you are not sure of. Only if you truly do not recognise the company AND no background was provided, say its details are limited.' : ''}
-${ua ? 'IMPORTANT: Respond ENTIRELY in Ukrainian language using only Cyrillic characters. Never mix in Chinese, Japanese, or any other non-Cyrillic script.' : 'Respond in English only.'}
-Return ONLY this JSON structure:
-{"sector":"...","risk":"${ua ? 'Високий або Середній або Низький' : 'High or Medium or Low'}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${ua ? 'одне слово: Купувати або Тримати або Продавати' : 'one word: Buy or Hold or Sell'}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
+${langInstruction(lang)}
+Return ONLY this JSON structure (all text values in the language above; keep color and dir as the exact English keywords listed):
+{"sector":"...","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
 
   let text;
   try {
@@ -1055,7 +1067,7 @@ async function handleChat(request, env) {
     (userCurrency && userCurrency !== 'USD' && userFxRate > 0)
       ? `The user's display currency is ${userCurrency} (1 USD = ${userFxRate} ${userCurrency}). When stating prices, give USD first and add the approximate ${userCurrency} value in parentheses.`
       : '',
-    ua ? 'IMPORTANT: Respond ONLY in Ukrainian language. Never use Chinese, Japanese, Arabic or any other non-Latin/Cyrillic characters. If you catch yourself writing non-Ukrainian text, stop and rewrite in Ukrainian.' : 'Respond in English only.',
+    langInstruction(lang),
     'STYLE RULES: Be dense and specific. Every sentence must contain a concrete fact (number, date, event, name) or a direct answer. FORBIDDEN: filler and obvious generalities like "prices can change over time", "one of the largest companies in the world", "many factors influence the price", "it is worth noting". Never repeat the same idea twice. Default length 3-6 short sentences; go longer only if the user asks for detail.',
     'News headlines may mention several companies — attribute each fact to the correct company, never mix them up.',
     'Treat a word as a stock ticker ONLY if live data for it is provided above, or the user wrote it in CAPITALS (TSLA, NOW). Lowercase common words ("now", "all", "key", "open") are ordinary English words — never reinterpret them as tickers.',
