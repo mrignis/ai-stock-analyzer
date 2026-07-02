@@ -90,23 +90,26 @@ async function main() {
     pass('crypto BTC analyze + add', `${r.ticker}, ${r.price}`);
   } catch (e) { fail('crypto BTC analyze + add', e.message); }
 
-  // 5) Second stock to watchlist, then star it and confirm it shows on home
+  // 5) Second stock to watchlist, then star it and confirm it shows on home.
+  // Use the RESOLVED ticker (#r-ticker) for the selectors — the worker may resolve
+  // AAPL to a foreign listing on a Finnhub blip, so the star's data-ticker isn't
+  // always the literal input.
   try {
-    await analyze(page, 'AAPL', 'AAPL');
+    const rA = await analyze(page, 'AAPL', 'AAPL');
+    const addT = rA.ticker; // whatever the header/watchlist actually uses
     await page.click('#watch-btn');
     await page.click('#tab-watchlist');
     await page.waitForSelector('.watch-item', { timeout: 5000 });
     const items = await page.locator('.watch-item').count();
-    // star the AAPL row
-    await page.locator('.watch-star[data-ticker="AAPL"]').first().click();
+    await page.locator(`.watch-star[data-ticker="${addT}"]`).first().click();
     await page.screenshot({ path: `${SHOTS}/j5-watchlist.png` });
     // Back to the HOME view via the logo — #tab-search alone keeps the last
     // analysis result on screen, which hides the home watchlist block. The logo
     // clears the result and shows the home list where pinned tiles live.
     await page.click('#nav-logo');
-    await page.waitForSelector('.hwl-item[data-ticker="AAPL"]', { state: 'visible', timeout: 8000 });
+    await page.waitForSelector(`.hwl-item[data-ticker="${addT}"]`, { state: 'visible', timeout: 8000 });
     await page.screenshot({ path: `${SHOTS}/j6-home-pinned.png` });
-    pass('watchlist→star→home', `${items} items, AAPL pinned to home`);
+    pass('watchlist→star→home', `${items} items, ${addT} pinned to home`);
   } catch (e) { fail('watchlist→star→home', e.message); await page.screenshot({ path: `${SHOTS}/j5-FAIL.png` }); }
 
   // 6) Multi-turn chat: ask, then a follow-up

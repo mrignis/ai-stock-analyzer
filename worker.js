@@ -683,9 +683,16 @@ async function handleAnalyze(request, env, ctx) {
     const probe = await finnhubQuote(env, CRYPTO_NAMES[raw] || raw);
     if (!probe || !probe.c || probe.c === 0) {
       const isBareTicker = /^[A-Z0-9]{1,6}$/.test(raw);
-      const fx = isBareTicker ? await probeForeignExchange(raw) : null;
+      // Finnhub can transiently fail for a VALID US ticker — confirm on Yahoo (our
+      // price fallback) before assuming it's foreign, else e.g. AAPL wrongly becomes
+      // AAPL.TO ($43 CAD) when Apple's Finnhub lookup blips. A real foreign-only
+      // ticker (SAU) has no bare US quote on Yahoo, so it still falls through.
+      const usYahoo = isBareTicker ? await yahooQuote(raw) : null;
+      const fx = (isBareTicker && !(usYahoo && usYahoo.c > 0)) ? await probeForeignExchange(raw) : null;
       if (fx) {
         raw = fx.sym; resolvedName = fx.name || null;
+      } else if (usYahoo && usYahoo.c > 0) {
+        resolvedName = usYahoo.name || null; // valid US ticker — keep `raw` as-is
       } else {
         const resolved = await resolveTickerByName(raw);
         if (resolved && resolved.sym && /^[A-Z0-9.\-:/]{1,15}$/.test(resolved.sym.toUpperCase())) {
