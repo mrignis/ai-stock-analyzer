@@ -37,19 +37,27 @@ function runAnalysis() {
   // Cache key includes lang — UA and EN results cached separately
   var cacheKey = 'analyze_' + raw + '_' + lang;
 
-  // Check cache first — show result instantly if available
-  cacheGet(cacheKey, CACHE_ANALYZE_TTL, function(cached) {
+  // Check cache first — show result instantly if available (SWR: also revalidate
+  // in the background when the cached verdict is stale, so the user sees fresh data
+  // without an empty screen, plus a freshness stamp).
+  cacheGetFull(cacheKey, CACHE_ANALYZE_TTL, function(entry) {
     if (currentTicker !== raw) return; // a newer analysis started — drop stale callback
+    var cached = entry && entry.d;
     // A cached analysis without a live price is a broken artifact (e.g. the
     // pre-registry fabrications) — ignore it and fetch fresh instead
-    if (cached && (!cached._quote || !cached._quote.c)) cached = null;
+    if (cached && (!cached._quote || !cached._quote.c)) { cached = null; entry = null; }
     if (cached) {
       document.getElementById('loading-state').style.display = 'none';
       // Show cached price immediately (instant UX — stale-while-revalidate)
       if (cached._quote && cached._quote.c > 0) renderPrice(cached._quote);
       // Also fetch fresh price in background — updates price box silently when ready
       fetchFreshPrice(raw, cached);
-      finish(raw, normalizeAI(cached));
+      finish(raw, normalizeAI(cached), entry.t);
+      // SWR: cached verdict older than 5 min → silently refresh it in the background
+      if (Date.now() - entry.t > SWR_ANALYZE_STALE) {
+        renderFreshness(entry.t, true);
+        analyzeFetch(raw, cacheKey, true);
+      }
       return;
     }
 
@@ -60,73 +68,80 @@ function runAnalysis() {
     // Price arrives in ~0.3s — show it immediately while the AI (3-5s)
     // is still thinking, so the screen is never "all skeleton"
     fetchFreshPrice(raw, null);
+    analyzeFetch(raw, cacheKey, false);
+  });
+}
 
-    // Guard: during the async cache lookup the analysis may have been stopped or
-    // superseded (Stop, a newer run, or a prior run's 65s timeout), which nulls
-    // currentAbort. Bail instead of crashing on `.signal` of null.
+// Runs the /analyze network call. silent=true is the SWR background refresh: no
+// loading skeleton, no 65s auto-abort, and failures are swallowed so the stale
+// cached result stays on screen. silent=false is the foreground path.
+function analyzeFetch(raw, cacheKey, silent) {
+  var signal = null, timeoutId = null;
+  if (!silent) {
+    // Guard: the analysis may have been stopped/superseded during the async cache
+    // lookup, which nulls currentAbort — bail instead of crashing on `.signal`.
     if (!currentAbort) return;
     var thisAbort = currentAbort;
-    var signal = thisAbort.signal;
-    // Auto-abort after 65s: the AI engine (Groq Llama 3.3) can queue under load
-    // at peak hours — better to wait than to drop a near-ready result. Only abort
-    // if it's still THIS analysis in flight, so a stale timeout never nulls a newer one.
-    var timeoutId = setTimeout(function() {
+    signal = thisAbort.signal;
+    // Auto-abort after 65s (Groq can queue under load) — only nulls its OWN
+    // controller, so a stale timeout never kills a newer analysis.
+    timeoutId = setTimeout(function() {
       if (currentAbort === thisAbort) { currentAbort.abort(); currentAbort = null; }
     }, 65000);
-    // Tell the user it's the AI queue, not a hang
     setTimeout(function() {
       var msgEl = document.getElementById('loading-msg');
       if (msgEl && document.getElementById('loading-state').style.display !== 'none') {
         msgEl.textContent = L('AI перевантажений, ще секунд 20-30...', 'AI is busy, ~20-30 more seconds...', "L'IA est occupée, encore ~20-30 secondes...");
       }
     }, 15000);
-    fetch(WORKER_URL + '/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker: raw, lang: lang }),
-      signal: signal,
+  }
+  fetch(WORKER_URL + '/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker: raw, lang: lang }),
+    signal: signal,
+  })
+    .then(function(r) { return r.text(); })
+    .then(function(txt) {
+      // Cloudflare returns an HTML error page when the worker crashes or
+      // times out — show a human message instead of a JSON parse error
+      try { return JSON.parse(txt); }
+      catch (_) {
+        throw new Error(L('Сервер тимчасово недоступний. Спробуй ще раз за хвилину.', 'Server temporarily unavailable. Try again in a minute.', 'Serveur temporairement indisponible. Réessayez dans une minute.'));
+      }
     })
-      .then(function(r) { return r.text(); })
-      .then(function(txt) {
-        // Cloudflare returns an HTML error page when the worker crashes or
-        // times out — show a human message instead of a JSON parse error
-        try { return JSON.parse(txt); }
-        catch (_) {
-          throw new Error(L('Сервер тимчасово недоступний. Спробуй ще раз за хвилину.', 'Server temporarily unavailable. Try again in a minute.', 'Serveur temporairement indisponible. Réessayez dans une minute.'));
-        }
-      })
-      .then(function(data) {
-        clearTimeout(timeoutId);
-        if (currentTicker !== raw) return; // stale response — user already analyzes another ticker
-        if (data.error) throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : ''));
-        cacheSet(cacheKey, data); // Save to cache (includes lang)
-        // The server may resolve a typed NAME to a real symbol (SIXT -> TSLX):
-        // use the resolved ticker for the price and the header, or the price
-        // lookup misses and the box stays empty
-        var realT = data._ticker || raw;
-        currentTicker = realT;
-        // Always refetch a live /price here. The /analyze blob may be served from
-        // the worker's 30-min edge cache, so its _quote can be up to 30 min stale —
-        // seeding the price cache from it would show a stale price. _quote still
-        // rides along as fetchFreshPrice's fallback if the live /price call fails.
-        fetchFreshPrice(realT, data);
-        finish(realT, normalizeAI(data));
-      })
-      .catch(function(e) {
-        clearTimeout(timeoutId);
-        if (e.name === 'AbortError') {
-          showError(L('Час очікування вийшов. Спробуй ще раз.', 'Request timed out. Please try again.', 'Délai dépassé. Veuillez réessayer.'));
-          return;
-        }
-        var msg = e.message || '';
-        var retryMatch = msg.match(/retry in ([\d.]+)s/i);
-        if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted') || msg.toLowerCase().includes('rate')) {
-          var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
-          msg = L('⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.', '⏳ Rate limit. Try again in ' + sec + ' sec.', '⏳ Limite atteinte. Réessayez dans ' + sec + ' s.');
-        }
-        showError(msg || L('Помилка з\'єднання', 'Connection error', 'Erreur de connexion'));
-      });
-  });
+    .then(function(data) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (currentTicker !== raw) return; // stale response — user already analyzes another ticker
+      if (data.error) { if (silent) return; throw new Error('Worker: ' + data.error + (data.raw ? ' | ' + data.raw.slice(0, 100) : '')); }
+      cacheSet(cacheKey, data); // Save to cache (includes lang)
+      // The server may resolve a typed NAME to a real symbol (SIXT -> TSLX):
+      // use the resolved ticker for the price and the header, or the price
+      // lookup misses and the box stays empty
+      var realT = data._ticker || raw;
+      currentTicker = realT;
+      // Always refetch a live /price here. The /analyze blob may be served from
+      // the worker's 30-min edge cache, so its _quote can be up to 30 min stale —
+      // seeding the price cache from it would show a stale price. _quote still
+      // rides along as fetchFreshPrice's fallback if the live /price call fails.
+      fetchFreshPrice(realT, data);
+      finish(realT, normalizeAI(data), Date.now());
+    })
+    .catch(function(e) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (silent) return; // background refresh failed — keep the stale result silently
+      if (e.name === 'AbortError') {
+        showError(L('Час очікування вийшов. Спробуй ще раз.', 'Request timed out. Please try again.', 'Délai dépassé. Veuillez réessayer.'));
+        return;
+      }
+      var msg = e.message || '';
+      var retryMatch = msg.match(/retry in ([\d.]+)s/i);
+      if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('exhausted') || msg.toLowerCase().includes('rate')) {
+        var sec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
+        msg = L('⏳ Перевищено ліміт. Спробуй через ' + sec + ' сек.', '⏳ Rate limit. Try again in ' + sec + ' sec.', '⏳ Limite atteinte. Réessayez dans ' + sec + ' s.');
+      }
+      showError(msg || L('Помилка з\'єднання', 'Connection error', 'Erreur de connexion'));
+    });
 }
 
 function fetchFreshPrice(raw, fallbackData) {
@@ -292,14 +307,29 @@ function normalizeSector(sector, lang) {
   return sector;
 }
 
-function finish(ticker, data) {
+function finish(ticker, data, cachedAt) {
   currentAbort = null;
   document.getElementById('stop-btn').style.display = 'none';
   document.getElementById('analyze-btn').style.display = 'block';
   currentData = data;
   addHistory(ticker, data);
-  renderResult(ticker, data);
+  renderResult(ticker, data, cachedAt);
   fetchRealChart(ticker, data.color);
+}
+
+// Freshness stamp under the header (Gemini's council idea): so the user knows how
+// current the AI verdict is and never acts on stale data. `revalidating` shows a
+// subtle "refreshing…" while the SWR background call is in flight.
+function renderFreshness(cachedAt, revalidating) {
+  var el = document.getElementById('r-fresh');
+  if (!el) return;
+  if (!cachedAt) { el.style.display = 'none'; return; }
+  var t = new Date(cachedAt);
+  var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  var txt = L('Актуально на ', 'As of ', 'À jour au ') + hhmm;
+  if (revalidating) txt += L(' · оновлюється…', ' · refreshing…', ' · actualisation…');
+  el.textContent = txt;
+  el.style.display = 'block';
 }
 
 function showError(msg) {
@@ -323,9 +353,10 @@ function showError(msg) {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
-function renderResult(ticker, d) {
+function renderResult(ticker, d, cachedAt) {
   document.getElementById('loading-state').style.display = 'none';
   document.getElementById('result').style.display = 'block';
+  renderFreshness(cachedAt || Date.now());
   document.getElementById('r-ticker').textContent = ticker;
   document.getElementById('r-sector').textContent = normalizeSector(d.sector, lang);
   document.getElementById('r-risk').textContent = d.risk;

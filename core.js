@@ -34,6 +34,15 @@ function cacheGet(key, ttl, cb) {
     cb(e && (Date.now() - e.t) < ttl ? e.d : null);
   });
 }
+// Like cacheGet but hands back the whole entry {d, t} so callers can show data
+// freshness ("as of HH:MM") and decide whether to revalidate in the background (SWR).
+function cacheGetFull(key, ttl, cb) {
+  chrome.storage.local.get('c_' + key, function(s) {
+    var e = s['c_' + key];
+    cb(e && (Date.now() - e.t) < ttl ? e : null);
+  });
+}
+var SWR_ANALYZE_STALE = 5 * 60 * 1000; // serve cached /analyze instantly, refresh in bg if older
 function cacheSet(key, data) {
   var o = {}; o['c_' + key] = { d: data, t: Date.now() };
   chrome.storage.local.set(o);

@@ -68,6 +68,9 @@ async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
   try {
     return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 20000);
   } catch (e) {
+    // Observability (council follow-up): surface engine failures in `wrangler tail`
+    // so a Groq throttle/outage wave is visible instead of silent.
+    console.warn('[AI] primary ' + AI_MODEL + ' failed: ' + (e && e.message || e) + ' → fallback ' + AI_FALLBACK_MODEL);
     return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
   }
 }
@@ -363,7 +366,8 @@ async function fetchCompanyInfo(env, t, fallbackName, question) {
   // else has any background. Returns '' on a 429, so chat never blocks.
   const q = question || '';
   const newsQ = /\b(news|latest|recent|today|update|announce|develop|happen)\b/i.test(q) ||
-    /новин|останн|нещодавн|сьогодн|оновлен|поді/i.test(q);
+    /новин|останн|нещодавн|сьогодн|оновлен|поді/i.test(q) ||
+    /nouvelle|actualit|récent|recent|aujourd|derni|annonc|évolu/i.test(q);
   if (name && (newsQ || !haveBg)) {
     const sq = newsQ ? name + ' ' + q + ' latest news' : name + ' company business';
     const web = await webSearch(env, sq.slice(0, 200), 3);
@@ -415,7 +419,10 @@ async function webSearch(env, query, maxResults = 3) {
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + env.OLLAMA_API_KEY },
       body: JSON.stringify({ query, max_results: maxResults }),
     }, 6000);
-    if (!res.ok) return ''; // 429/5xx — caller falls back to profile, never blocks
+    if (!res.ok) { // 429/5xx — caller falls back to profile, never blocks
+      if (res.status === 429) console.warn('[webSearch] Ollama free-tier quota hit (429) — falling back to profile');
+      return '';
+    }
     const data = await res.json();
     const results = data.results || [];
     if (!results.length) return '';
