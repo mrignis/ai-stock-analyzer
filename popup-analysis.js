@@ -198,6 +198,31 @@ function normalizeAI(j) {
   };
 }
 
+// French layer keyed by the normalized ENGLISH result — avoids adding `fr` to
+// every map entry. AI already answers in French in FR mode; this fixes the
+// watchlist/home pills that are stored/normalized as English (Pylyp's screenshot).
+var VERDICT_FR = {
+  'Buy': 'Acheter', 'Sell': 'Vendre', 'Hold': 'Conserver', 'Stable': 'Stable',
+  'Risky': 'Risqué', 'Promising': 'Prometteur', 'Caution': 'Prudence',
+  'Situational': 'Situationnel', 'Avoid': 'À éviter', 'Strong Buy': 'Achat fort',
+  'Neutral': 'Neutre', 'Negative': 'Négatif', 'Positive': 'Positif',
+  'Growth': 'Croissance', 'Decline': 'Déclin'
+};
+var SECTOR_FR = {
+  'Technology': 'Technologie', 'Semiconductors': 'Semi-conducteurs',
+  'Automotive': 'Automobile', 'Auto / Energy': 'Auto / Énergie',
+  'Social Media / AI': 'Réseaux sociaux / IA', 'E-commerce / Cloud': 'E-commerce / Cloud',
+  'Consumer Goods': 'Biens de consommation', 'Consumer Discretionary': 'Consommation discrétionnaire',
+  'Healthcare': 'Santé', 'Financials': 'Finance', 'Finance': 'Finance',
+  'Information Technology': "Technologies de l'information", 'Communication Services': 'Services de communication',
+  'Energy': 'Énergie', 'Utilities': 'Services publics', 'Real Estate': 'Immobilier',
+  'Materials': 'Matériaux', 'Industrials': 'Industrie', 'Defense': 'Défense',
+  'Biotech': 'Biotech', 'Biotechnology': 'Biotechnologie', 'Pharmaceuticals': 'Pharmaceutique',
+  'Cloud Computing': 'Cloud', 'Artificial Intelligence': 'Intelligence artificielle',
+  'Quantum Computing': 'Informatique quantique', 'Food & Beverage': 'Alimentation & boissons',
+  'Retail': 'Commerce de détail', 'Media': 'Médias', 'Streaming': 'Streaming'
+};
+
 function normalizeVerdict(verdict, lang) {
   if (!verdict) return verdict;
   var v = verdict.toLowerCase().trim();
@@ -237,8 +262,9 @@ function normalizeVerdict(verdict, lang) {
     'спад': { ua: 'Спад', en: 'Decline' },
   };
   var found = map[v];
-  if (found) return found[lang] || found.en;
-  return verdict.charAt(0).toUpperCase() + verdict.slice(1);
+  var en = found ? found.en : (verdict.charAt(0).toUpperCase() + verdict.slice(1));
+  if (lang === 'fr') return VERDICT_FR[en] || en; // AI's own FR word passes through
+  return found ? (found[lang] || found.en) : en;
 }
 
 function normalizeSector(sector, lang) {
@@ -303,8 +329,9 @@ function normalizeSector(sector, lang) {
     'стрімінг': { ua: 'Стрімінг', en: 'Streaming' },
   };
   var found = map[sector.toLowerCase()];
-  if (found) return found[lang] || found.en;
-  return sector;
+  var en = found ? found.en : sector;
+  if (lang === 'fr') return SECTOR_FR[en] || en; // AI's own FR sector passes through
+  return found ? (found[lang] || found.en) : en;
 }
 
 function finish(ticker, data, cachedAt) {
