@@ -64,12 +64,62 @@ function langInstruction(lang) {
 
 async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
   // Primary engine (Llama 3.3 70B, 20s) → on timeout/overload retry with the
-  // fast fallback (8B-instant, 12s). User always gets an answer at peak hours.
+  // fast fallback (8B-instant, 12s) → then cross-provider to Gemini if configured.
+  // The Gemini hop only fires when BOTH Groq models fail (throttled/down), so it's
+  // the safety net that turns a 429/500 under load into a real answer. Normal load
+  // never touches it. No GEMINI_KEY set → behaves exactly as before (Groq only).
   try {
     return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 20000);
   } catch (e) {
-    return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
+    try {
+      return await aiRequest(env, AI_FALLBACK_MODEL, messages, temperature, maxTokens, 12000);
+    } catch (e2) {
+      if (env.GEMINI_KEY) return await callGemini(env, messages, temperature, maxTokens);
+      throw e2;
+    }
   }
+}
+
+// Cross-provider fallback engine (Google Gemini, free tier). Converts the
+// OpenAI-style messages Groq uses into Gemini's format: system messages become
+// systemInstruction, the rest become `contents`. Returns the text or throws.
+const GEMINI_MODEL = 'gemini-2.0-flash';
+async function callGemini(env, messages, temperature, maxTokens) {
+  const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+  const contents = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${env.GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
+          generationConfig: { temperature, maxOutputTokens: maxTokens },
+        }),
+        signal: controller.signal,
+      }
+    );
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('Gemini timeout — try again');
+    throw e;
+  }
+  clearTimeout(timer);
+  const raw = await res.text();
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error('Gemini error (HTTP ' + res.status + ')'); }
+  if (data.error) throw new Error('Gemini: ' + (data.error.message || JSON.stringify(data.error)));
+  const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+  if (!text) throw new Error('Gemini returned empty response');
+  return text;
 }
 
 async function aiRequest(env, model, messages, temperature, maxTokens, timeoutMs) {

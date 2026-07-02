@@ -298,6 +298,8 @@ var FR_LABELS = {
   'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
+  // Language-neutral (kept identical across locales) — listed for full 48/48 coverage
+  'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...',
 };
 
 // 3-language string pick: L(ua, en, fr). `lang` is the global code; fr falls back
