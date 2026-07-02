@@ -13,6 +13,22 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://finance.yahoo.com/*",
+        "*://www.google.com/finance/*",
+        "*://www.marketwatch.com/*",
+        "*://www.cnbc.com/*",
+        "*://www.reuters.com/*",
+        "*://www.bloomberg.com/*",
+        "*://seekingalpha.com/*",
+        "*://finance.google.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

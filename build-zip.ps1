@@ -7,7 +7,7 @@ $out  = Join-Path (Split-Path $root) 'ai-stock-analyzer-store.zip'
 
 # Runtime files that ship in the extension
 $files = @(
-  'manifest.json', 'popup.html', 'background.js', 'icons', 'fonts',
+  'manifest.json', 'popup.html', 'background.js', 'content.js', 'icons', 'fonts',
   'core.js', 'popup-charts.js', 'popup-analysis.js', 'popup-news.js',
   'popup-alerts.js', 'popup-chat.js', 'popup-portfolio.js', 'popup-lists.js', 'popup.js'
 )

@@ -190,5 +190,10 @@ chrome.notifications.onClicked.addListener(function(notifId) {
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
   if (msg.action === 'checkNow') { checkPrices(); runTargetCheck(); sendResponse({ ok: true }); }
+  // Content-script clicked a highlighted ticker → open the full analysis in a tab.
+  if (msg.action === 'openAnalysis' && msg.ticker && /^[A-Za-z0-9.\-]{1,10}$/.test(msg.ticker)) {
+    chrome.tabs.create({ url: 'popup.html?tab=1&ticker=' + encodeURIComponent(msg.ticker.toUpperCase()) });
+    sendResponse({ ok: true });
+  }
   return true;
 });

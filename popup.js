@@ -8,6 +8,8 @@ var theme = 'dark';
 var currency = 'USD'; // display currency for all prices
 var fxRate = 1;       // USD → currency multiplier (loaded from /fx)
 var isTabMode = (new URLSearchParams(window.location.search).get('tab') === '1');
+// Opened from a highlighted ticker on a news page (content.js) → auto-analyze it.
+var initTicker = (new URLSearchParams(window.location.search).get('ticker') || '').toUpperCase();
 var currentTicker = '';
 var currentData = null;
 var watchlist = [];
@@ -60,6 +62,13 @@ document.addEventListener('DOMContentLoaded', function() {
       renderHomeWatchlist();
     });
     loadMarketNews(); // fills the home gap with market headlines
+
+    // Deep-link from a news-page highlight: pre-fill and run the analysis.
+    if (initTicker && /^[A-Z0-9.\-]{1,10}$/.test(initTicker)) {
+      showPanel('search');
+      document.getElementById('ticker-input').value = initTicker;
+      runAnalysis();
+    }
 
     document.getElementById('nav-logo').addEventListener('click', function() {
       if (currentAbort) { currentAbort.abort(); currentAbort = null; }
