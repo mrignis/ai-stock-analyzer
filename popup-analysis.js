@@ -61,11 +61,17 @@ function runAnalysis() {
     // is still thinking, so the screen is never "all skeleton"
     fetchFreshPrice(raw, null);
 
-    var signal = currentAbort.signal;
+    // Guard: during the async cache lookup the analysis may have been stopped or
+    // superseded (Stop, a newer run, or a prior run's 65s timeout), which nulls
+    // currentAbort. Bail instead of crashing on `.signal` of null.
+    if (!currentAbort) return;
+    var thisAbort = currentAbort;
+    var signal = thisAbort.signal;
     // Auto-abort after 65s: the AI engine (Groq Llama 3.3) can queue under load
-    // at peak hours — better to wait than to drop a near-ready result
+    // at peak hours — better to wait than to drop a near-ready result. Only abort
+    // if it's still THIS analysis in flight, so a stale timeout never nulls a newer one.
     var timeoutId = setTimeout(function() {
-      if (currentAbort) { currentAbort.abort(); currentAbort = null; }
+      if (currentAbort === thisAbort) { currentAbort.abort(); currentAbort = null; }
     }, 65000);
     // Tell the user it's the AI queue, not a hang
     setTimeout(function() {
