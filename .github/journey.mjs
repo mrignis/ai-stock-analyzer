@@ -21,13 +21,23 @@ const errs = [];
 // (regex) and a verdict is present. Returns {ticker, verdict, price}.
 async function analyze(page, input, expect, shot) {
   await page.click('#tab-search');
-  await page.fill('#ticker-input', input);
-  await page.click('#analyze-btn');
-  await page.waitForFunction((re) => {
-    const t = document.querySelector('#r-ticker')?.textContent?.trim() || '';
-    const v = document.querySelector('#r-verdict')?.textContent?.trim() || '';
-    return new RegExp(re, 'i').test(t) && v.length > 0;
-  }, expect, { timeout: 75000 });
+  // Retry once on timeout: the shared free Groq key can rate-limit (429) or queue
+  // under load, which is a transient infra blip, not a product failure. Wait out
+  // the window and re-submit before giving up (mirrors run.mjs 429-resilience).
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.fill('#ticker-input', input);
+    await page.click('#analyze-btn');
+    try {
+      await page.waitForFunction((re) => {
+        const t = document.querySelector('#r-ticker')?.textContent?.trim() || '';
+        const v = document.querySelector('#r-verdict')?.textContent?.trim() || '';
+        return new RegExp(re, 'i').test(t) && v.length > 0;
+      }, expect, { timeout: 55000 });
+      lastErr = null; break;
+    } catch (e) { lastErr = e; await page.waitForTimeout(12000); }
+  }
+  if (lastErr) throw lastErr;
   const ticker = (await page.textContent('#r-ticker'))?.trim();
   const verdict = (await page.textContent('#r-verdict'))?.trim();
   const priceVisible = await page.locator('#price-box').isVisible();
@@ -151,6 +161,12 @@ async function main() {
   console.log(`  ${results.length - failed} passed, ${failed} failed`);
   if (errs.length) { console.log(`\n  Console errors (${errs.length}):`); [...new Set(errs)].slice(0, 10).forEach(e => console.log('   • ' + e.slice(0, 160))); }
   else console.log('  No console errors.');
+  // Surface the per-check result on the run's Summary page (visible without logs).
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const { appendFileSync } = await import('fs');
+    const md = '### user journey\n\n' + results.map(r => `- ${r[0] === 'PASS' ? '✅' : '❌'} ${r[1]}`).join('\n') + '\n';
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+  }
   process.exit(failed ? 1 : 0);
 }
 
