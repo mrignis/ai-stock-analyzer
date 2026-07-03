@@ -27,6 +27,8 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" node .github/smoke.mjs
       - name: Run user-journey test (name/foreign/crypto, star→home, multi-turn chat)
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" node .github/journey.mjs
+      - name: Run content-script test (ticker highlighting on a finance-page fixture)
+        run: xvfb-run -a --server-args="-screen 0 1280x1024x24" node .github/content.mjs
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
