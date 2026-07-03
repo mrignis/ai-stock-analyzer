@@ -701,8 +701,9 @@ async function handleAnalyze(request, env, ctx) {
           raw = resolved.sym.toUpperCase();
           resolvedName = resolved.name || null;
         } else if (resolved && resolved.candidates) {
-          return json({ error: (lang === 'ua' ? 'Можливо, ви мали на увазі: ' : 'Did you mean: ') +
-            resolved.candidates.join(', ') + '?' }, 404);
+          console.warn('[resolve] no exact match for "' + raw + '" → suggested: ' + resolved.candidates.join(', '));
+          const dym = lang === 'ua' ? 'Можливо, ви мали на увазі: ' : lang === 'fr' ? 'Vouliez-vous dire : ' : 'Did you mean: ';
+          return json({ error: dym + resolved.candidates.join(', ') + '?' }, 404);
         }
       }
     }
