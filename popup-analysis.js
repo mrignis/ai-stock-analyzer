@@ -262,6 +262,9 @@ function normalizeVerdict(verdict, lang) {
     'спад': { ua: 'Спад', en: 'Decline' },
   };
   var found = map[v];
+  // A verdict may have been STORED in French (watchlist saved during FR analysis) —
+  // reverse-map the French word back to canonical English so it re-localizes.
+  if (!found) { for (var k in VERDICT_FR) { if (VERDICT_FR[k].toLowerCase() === v) { found = map[k.toLowerCase()]; break; } } }
   var en = found ? found.en : (verdict.charAt(0).toUpperCase() + verdict.slice(1));
   if (lang === 'fr') return VERDICT_FR[en] || en; // AI's own FR word passes through
   return found ? (found[lang] || found.en) : en;
@@ -329,6 +332,8 @@ function normalizeSector(sector, lang) {
     'стрімінг': { ua: 'Стрімінг', en: 'Streaming' },
   };
   var found = map[sector.toLowerCase()];
+  // Reverse-map a sector STORED in French (watchlist saved during FR analysis).
+  if (!found) { var sv = sector.toLowerCase(); for (var k in SECTOR_FR) { if (SECTOR_FR[k].toLowerCase() === sv) { found = map[k.toLowerCase()]; break; } } }
   var en = found ? found.en : sector;
   if (lang === 'fr') return SECTOR_FR[en] || en; // AI's own FR sector passes through
   return found ? (found[lang] || found.en) : en;
