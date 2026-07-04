@@ -489,6 +489,33 @@ async function yahooProfile(symbol) {
   return null;
 }
 
+// Yahoo analyst recommendation trend — fallback for tickers Finnhub's FREE tier
+// doesn't cover (foreign/TSX like GMIN.TO, which Yahoo rates but Finnhub doesn't).
+// Same crumb flow as yahooProfile. Returns {strongBuy,buy,hold,sell,strongSell,period}
+// or null (funds/indices have no analyst coverage anywhere → stays null).
+async function yahooAnalysts(symbol) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cr = await getYahooCrumb(attempt === 1);
+    if (!cr) return null;
+    try {
+      const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
+        `?modules=recommendationTrend&crumb=${encodeURIComponent(cr.crumb)}`;
+      const res = await fetchT(url, { headers: { 'User-Agent': YH_UA, 'Cookie': cr.cookie } }, 5000);
+      if (res.status === 401) { yahooCrumb = null; continue; } // stale crumb — retry once
+      if (!res.ok) return null;
+      const data = await res.json();
+      const tr = data?.quoteSummary?.result?.[0]?.recommendationTrend?.trend?.[0];
+      if (!tr) return null;
+      const a = {
+        strongBuy: tr.strongBuy || 0, buy: tr.buy || 0, hold: tr.hold || 0,
+        sell: tr.sell || 0, strongSell: tr.strongSell || 0, period: tr.period || '',
+      };
+      return (a.strongBuy + a.buy + a.hold + a.sell + a.strongSell) > 0 ? a : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
 // "servicenow" → NOW. Noise queries return empty — safe to call with raw text.
 // Hybrid resolver (team vote, fixes "intell"→BOTZ): exact/prefix match gives
@@ -751,11 +778,17 @@ async function handleAnalyze(request, env, ctx) {
   const recRaw  = await safeJson(recRes, []);
   // Most recent analyst-recommendation bucket (Finnhub returns newest-first).
   const recTop  = Array.isArray(recRaw) && recRaw[0] ? recRaw[0] : null;
-  const analysts = recTop ? {
+  let analysts = recTop ? {
     strongBuy: recTop.strongBuy || 0, buy: recTop.buy || 0, hold: recTop.hold || 0,
     sell: recTop.sell || 0, strongSell: recTop.strongSell || 0, period: recTop.period || '',
   } : null;
-  const analystTotal = analysts ? (analysts.strongBuy + analysts.buy + analysts.hold + analysts.sell + analysts.strongSell) : 0;
+  let analystTotal = analysts ? (analysts.strongBuy + analysts.buy + analysts.hold + analysts.sell + analysts.strongSell) : 0;
+  // Finnhub free tier has no foreign/TSX coverage — Yahoo does (GMIN.TO). Fall back
+  // there when Finnhub gave nothing. Genuine funds/indices stay uncovered (correct).
+  if (analystTotal === 0 && !isCrypto) {
+    const ya = await yahooAnalysts(t);
+    if (ya) { analysts = ya; analystTotal = ya.strongBuy + ya.buy + ya.hold + ya.sell + ya.strongSell; }
+  }
 
   // Unknown ticker guard: no price AND no profile = the symbol does not
   // exist — refuse instead of letting the AI invent a company (test finding).
