@@ -802,12 +802,19 @@ ${analystTotal > 0 ? `Analyst consensus (${analysts.period}): ${analysts.strongB
 ${news || 'No recent news available'}`.trim();
 
   const ua = lang === 'ua';
+  // ETF / index / commodity funds must NOT be analyzed as a single company —
+  // SPY isn't "Financial Services". Detect the common ones + an "ETF/index" name
+  // hint so the AI labels them as funds instead of inventing a company sector,
+  // which misleads users (Pylyp) and risks a Google "inaccurate content" flag.
+  const isFund = /^(SPY|SPX|QQQ|QQQM|VOO|VTI|IVV|IWM|DIA|GLD|IAU|SLV|USO|VGT|VUG|VTV|VIG|VYM|VEA|VWO|VXUS|SCHD|SCHB|ARKK|ARKG|EEM|EFA|TLT|IEF|SHY|HYG|LQD|BND|AGG|SMH|SOXX|XBI|XL[BCEFIKPRUV])$/i.test(t)
+    || /\b(ETF|ETN|index fund)\b/i.test(companyName);
   const systemPrompt = `You are a professional stock analyst. Reply ONLY with valid JSON — no markdown, no explanation, no extra text.`;
   const userPrompt = `Analyze this stock based on real data:
 
 ${context}
 
 ${thinData ? 'NOTE: No financial profile was available — only the company name, live price, and the company background above (if any). Describe what the company does using that background and the company name itself (e.g. "X Mining Corp" is clearly a mining company — say so, do not write "unknown activity"). You MAY use well-known general knowledge about the company. Do NOT invent specific figures (revenue, market cap, partnerships, dates) you are not sure of. Only if you truly do not recognise the company AND no background was provided, say its details are limited.' : ''}
+${isFund ? 'IMPORTANT: This ticker is an ETF / index / commodity fund, NOT a single company. Do NOT give it a single-company sector like "Financial Services" or "Technology". For "sector" use "Index Fund", "ETF", or the fund theme (e.g. "S&P 500", "Gold", "Broad Market"). Analyze it as a DIVERSIFIED BASKET tracking its index/asset — describe what it holds and its risk profile, never a single business. Keep "trend"/"verdict" measured and factual (a broad-market fund is not one volatile stock; avoid sensational calls like "bubble"). Base any view on the actual index, not invention.' : ''}
 ${langInstruction(lang)}
 Return ONLY this JSON structure (all text values in the language above; keep color and dir as the exact English keywords listed):
 {"sector":"...","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
