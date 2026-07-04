@@ -126,7 +126,7 @@
     c.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 256)) + 'px';
     var hit = priceCache[t];
     if (hit && Date.now() - hit.at < 60000) { paint(c, t, hit.d); return; }
-    paint(c, t, null); c.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
+    c.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
     fetch(WORKER + '/price?ticker=' + encodeURIComponent(t))
       .then(function (r) { return r.json(); })
       .then(function (d) { priceCache[t] = { at: Date.now(), d: d }; if (card && card.style.display !== 'none') paint(card, t, d); })
@@ -149,18 +149,23 @@
   scan(document.body);
 
   // Re-scan on dynamically loaded content (infinite-scroll news), debounced.
-  var timer = null;
+  // Accumulate added nodes across ALL mutations in the debounce window (the old
+  // code only kept the first batch, dropping nodes added mid-window), then scan
+  // once. Skip nodes detached before the timer fires.
+  var timer = null, pending = [];
   var mo = new MutationObserver(function (muts) {
     if (count >= MAX_HL) { mo.disconnect(); return; }
-    if (timer) return;
+    for (var j = 0; j < muts.length; j++) {
+      var an = muts[j].addedNodes;
+      for (var i = 0; i < an.length; i++) {
+        if (an[i].nodeType === 1 && !(an[i].classList && an[i].classList.contains(HL_CLASS))) pending.push(an[i]);
+      }
+    }
+    if (timer || !pending.length) return;
     timer = setTimeout(function () {
       timer = null;
-      muts.forEach(function (mu) {
-        for (var i = 0; i < mu.addedNodes.length; i++) {
-          var nd = mu.addedNodes[i];
-          if (nd.nodeType === 1 && !(nd.classList && nd.classList.contains(HL_CLASS))) scan(nd);
-        }
-      });
+      var batch = pending; pending = [];
+      batch.forEach(function (nd) { if (nd.isConnected !== false) scan(nd); });
     }, 500);
   });
   try { mo.observe(document.body, { childList: true, subtree: true }); } catch (e) {}

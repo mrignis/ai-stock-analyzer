@@ -16,14 +16,14 @@
   "content_scripts": [
     {
       "matches": [
-        "*://finance.yahoo.com/*",
-        "*://www.google.com/finance/*",
-        "*://www.marketwatch.com/*",
-        "*://www.cnbc.com/*",
-        "*://www.reuters.com/*",
-        "*://www.bloomberg.com/*",
-        "*://seekingalpha.com/*",
-        "*://finance.google.com/*"
+        "https://finance.yahoo.com/*",
+        "https://www.google.com/finance/*",
+        "https://www.marketwatch.com/*",
+        "https://www.cnbc.com/*",
+        "https://www.reuters.com/*",
+        "https://www.bloomberg.com/*",
+        "https://seekingalpha.com/*",
+        "https://finance.google.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
