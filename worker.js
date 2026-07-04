@@ -56,6 +56,9 @@ const AI_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but 
 const LANG_NAMES = { en: 'English', ua: 'Ukrainian', fr: 'French' };
 const RISK_HINT = { en: 'High or Medium or Low', ua: 'Високий або Середній або Низький', fr: 'Élevé ou Moyen ou Faible' };
 const VERDICT_HINT = { en: 'one word: Buy or Hold or Sell', ua: 'одне слово: Купувати або Тримати або Продавати', fr: 'un mot: Acheter ou Conserver ou Vendre' };
+// Trend must be a price DIRECTION, not a sensational market call ("Bubble") — a
+// constrained vocab keeps it factual and consistent (Pylyp: "Бульбашка" on SAU/SPY).
+const TREND_HINT = { en: 'one of: Uptrend, Downtrend, Sideways, Volatile', ua: 'одне з: Висхідний, Низхідний, Боковий, Волатильний', fr: 'un de: Haussière, Baissière, Latérale, Volatile' };
 function langInstruction(lang) {
   const name = LANG_NAMES[lang];
   if (!name || lang === 'en') return 'Respond in English only.';
@@ -817,7 +820,7 @@ ${thinData ? 'NOTE: No financial profile was available — only the company name
 ${isFund ? 'IMPORTANT: This ticker is an ETF / index / commodity fund, NOT a single company. Do NOT give it a single-company sector like "Financial Services" or "Technology". For "sector" use "Index Fund", "ETF", or the fund theme (e.g. "S&P 500", "Gold", "Broad Market"). Analyze it as a DIVERSIFIED BASKET tracking its index/asset — describe what it holds and its risk profile, never a single business. Keep "trend"/"verdict" measured and factual (a broad-market fund is not one volatile stock; avoid sensational calls like "bubble"). Base any view on the actual index, not invention.' : ''}
 ${langInstruction(lang)}
 Return ONLY this JSON structure (all text values in the language above; keep color and dir as the exact English keywords listed):
-{"sector":"...","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"...","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
+{"sector":"...","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"${TREND_HINT[lang] || TREND_HINT.en}","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
 
   let text;
   try {

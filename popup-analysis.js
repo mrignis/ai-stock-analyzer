@@ -422,7 +422,17 @@ function renderAnalysts(a) {
   var el = document.getElementById('r-analysts');
   if (!el) return;
   var total = a ? (a.strongBuy + a.buy + a.hold + a.sell + a.strongSell) : 0;
-  if (!a || total <= 0) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!a || total <= 0) {
+    // No Wall-Street coverage (ETF, index, crypto, foreign/penny) — say so plainly
+    // so the missing bar isn't mistaken for a broken feature (Pylyp: SPY/SAU).
+    el.style.display = 'block';
+    el.innerHTML =
+      '<div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">' +
+        L('Аналітики', 'Analysts', 'Analystes') + '</div>' +
+      '<div style="font-size:11px;color:var(--dim)">' +
+        L('Немає покриття аналітиками для цього інструмента', 'No analyst coverage for this instrument', "Aucune couverture d'analystes pour cet instrument") + '</div>';
+    return;
+  }
   var buy = a.strongBuy + a.buy, hold = a.hold, sell = a.sell + a.strongSell;
   var pc = function (n) { return (n / total * 100).toFixed(0); };
   var lbl = L('Аналітики', 'Analysts', 'Analystes');
