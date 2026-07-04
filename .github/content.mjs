@@ -59,6 +59,16 @@ async function main() {
   // 4) exactly 3 highlights (no over-matching)
   hl.length === 3 ? ok('exactly 3 highlights') : bad('highlight count', 'got ' + hl.length);
 
+  // 5b) hover a highlight → live-price card appears (Phase 2, real /price call)
+  try {
+    await page.hover('.ais-tk-hl[data-ais="AAPL"]');
+    await page.waitForFunction(() => {
+      const c = document.getElementById('ais-tk-card');
+      return c && c.style.display !== 'none' && /\$\d/.test(c.textContent);
+    }, { timeout: 15000 });
+    ok('hover shows live-price card');
+  } catch (e) { bad('hover shows live-price card', e.message); }
+
   // 5) click a highlight → opens analysis tab with the right ticker
   try {
     const [newPage] = await Promise.all([

@@ -718,7 +718,7 @@ async function handleAnalyze(request, env, ctx) {
   const today = getToday();
   const weekAgo = getDateDaysAgo(7);
 
-  const [quoteRes, profileRes, newsRes, metricsRes] = await Promise.allSettled([
+  const [quoteRes, profileRes, newsRes, metricsRes, recRes] = await Promise.allSettled([
     fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSym)}&token=${env.FINNHUB_KEY}`),
     isCrypto
       ? fetch(`https://finnhub.io/api/v1/crypto/profile?symbol=${encodeURIComponent(finnhubSym)}&token=${env.FINNHUB_KEY}`)
@@ -729,6 +729,11 @@ async function handleAnalyze(request, env, ctx) {
     isCrypto
       ? Promise.resolve({ json: () => ({}) })
       : fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${env.FINNHUB_KEY}`),
+    // Wall-Street analyst consensus (recommendation trends) — competitor parity
+    // (Investabloom shows analyst ratings). US stocks only; crypto/foreign return [].
+    isCrypto
+      ? Promise.resolve({ json: () => [] })
+      : fetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${t}&token=${env.FINNHUB_KEY}`),
   ]);
 
   // .catch: Finnhub 429s return HTML pages — treat as empty, never crash
@@ -740,6 +745,14 @@ async function handleAnalyze(request, env, ctx) {
   const profile = await safeJson(profileRes, {});
   const newsRaw = await safeJson(newsRes, []);
   const metrics = await safeJson(metricsRes, {});
+  const recRaw  = await safeJson(recRes, []);
+  // Most recent analyst-recommendation bucket (Finnhub returns newest-first).
+  const recTop  = Array.isArray(recRaw) && recRaw[0] ? recRaw[0] : null;
+  const analysts = recTop ? {
+    strongBuy: recTop.strongBuy || 0, buy: recTop.buy || 0, hold: recTop.hold || 0,
+    sell: recTop.sell || 0, strongSell: recTop.strongSell || 0, period: recTop.period || '',
+  } : null;
+  const analystTotal = analysts ? (analysts.strongBuy + analysts.buy + analysts.hold + analysts.sell + analysts.strongSell) : 0;
 
   // Unknown ticker guard: no price AND no profile = the symbol does not
   // exist — refuse instead of letting the AI invent a company (test finding).
@@ -785,7 +798,7 @@ P/E ratio: ${m['peNormalizedAnnual'] || m['peTTM'] || 'N/A'}
 52-week high: $${m['52WeekHigh'] || 'N/A'} | 52-week low: $${m['52WeekLow'] || 'N/A'}
 ROE (TTM): ${m['roeTTM'] != null ? m['roeTTM'].toFixed(1) + '%' : 'N/A'}
 Revenue growth YoY: ${m['revenueGrowthTTMYoy'] != null ? m['revenueGrowthTTMYoy'].toFixed(1) + '%' : 'N/A'}
-${background ? 'Company background: ' + background + '\n' : ''}Recent news (last 7 days):
+${analystTotal > 0 ? `Analyst consensus (${analysts.period}): ${analysts.strongBuy} strong-buy, ${analysts.buy} buy, ${analysts.hold} hold, ${analysts.sell} sell, ${analysts.strongSell} strong-sell — weigh this Wall-Street view in your verdict.\n` : ''}${background ? 'Company background: ' + background + '\n' : ''}Recent news (last 7 days):
 ${news || 'No recent news available'}`.trim();
 
   const ua = lang === 'ua';
@@ -825,6 +838,7 @@ Return ONLY this JSON structure (all text values in the language above; keep col
     _ticker: t, // resolved symbol — client may have typed a company name
     _name: companyName,
     _country: profile.country || null,
+    _analysts: analystTotal > 0 ? analysts : null, // Wall-Street consensus (or null)
   });
   // Only successful analyses reach here → safe to store on the edge for 30 min.
   // Client always refetches a live /price on top, so a slightly stale _quote in

@@ -11,6 +11,7 @@
   var HL_CLASS = 'ais-tk-hl';
   var MAX_HL = 250;      // safety cap per page
   var count = 0;
+  var WORKER = 'https://stock-ai-analyzer.chelb-dev.workers.dev'; // in host_permissions
 
   // Cashtags ($TSLA) and parenthesised tickers (AAPL). Common acronyms are NOT
   // tickers — exclude them so we don't underline "(USA)" or "(CEO)".
@@ -87,6 +88,61 @@
       e.preventDefault(); e.stopPropagation();
       var t = el.getAttribute('data-ais');
       if (t) chrome.runtime.sendMessage({ action: 'openAnalysis', ticker: t });
+    }
+  }, true);
+
+  // ── Phase 2: hover a highlighted ticker → floating card with the LIVE price ──
+  // Cheap (a /price GET, cached 60s per ticker) — no AI cost. Click still opens the
+  // full analysis. Card has pointer-events:none so it never intercepts page input.
+  var card = null, hideTimer = null, priceCache = {}, userLang = 'en';
+  try { chrome.storage.local.get('lang', function (s) { if (s && s.lang) userLang = s.lang; }); } catch (e) {}
+  function L2(ua, en, fr) { return userLang === 'fr' ? fr : userLang === 'ua' ? ua : en; }
+
+  function ensureCard() {
+    if (card) return card;
+    card = document.createElement('div');
+    card.id = 'ais-tk-card';
+    card.style.cssText = 'position:fixed;z-index:2147483647;background:#0f1420;color:#e8eaed;' +
+      'border:1px solid #2a3345;border-radius:8px;padding:8px 10px;font:12px/1.35 system-ui,Arial,sans-serif;' +
+      'box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:none;max-width:250px;display:none';
+    (document.body || document.documentElement).appendChild(card);
+    return card;
+  }
+  function paint(c, t, d) {
+    var head = '<b style="color:#4ade80;font-family:monospace">' + t + '</b>';
+    if (!d || !d.c) { c.innerHTML = head + ' · ' + L2('нема даних', 'no data', 'aucune donnée'); return; }
+    var pc = d.dp != null ? d.dp : (d.pc > 0 ? ((d.c - d.pc) / d.pc * 100) : 0);
+    var up = pc >= 0, col = up ? '#4ade80' : '#f87171', ar = up ? '▲' : '▼';
+    c.innerHTML = head + ' <span style="font-family:monospace">$' + d.c + '</span> ' +
+      '<span style="color:' + col + ';font-family:monospace">' + ar + ' ' + Math.abs(pc).toFixed(2) + '%</span>' +
+      '<div style="margin-top:4px;color:#8b93a7;font-size:11px">' +
+      L2('Клік — повний аналіз', 'Click for full analysis', "Cliquez pour l'analyse") + '</div>';
+  }
+  function showCard(target, t) {
+    var c = ensureCard();
+    var r = target.getBoundingClientRect();
+    c.style.display = 'block';
+    c.style.top = (r.bottom + 6) + 'px';
+    c.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 256)) + 'px';
+    var hit = priceCache[t];
+    if (hit && Date.now() - hit.at < 60000) { paint(c, t, hit.d); return; }
+    paint(c, t, null); c.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
+    fetch(WORKER + '/price?ticker=' + encodeURIComponent(t))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { priceCache[t] = { at: Date.now(), d: d }; if (card && card.style.display !== 'none') paint(card, t, d); })
+      .catch(function () {});
+  }
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target;
+    if (el && el.classList && el.classList.contains(HL_CLASS)) {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      var t = el.getAttribute('data-ais'); if (t) showCard(el, t);
+    }
+  }, true);
+  document.addEventListener('mouseout', function (e) {
+    var el = e.target;
+    if (el && el.classList && el.classList.contains(HL_CLASS)) {
+      hideTimer = setTimeout(function () { if (card) card.style.display = 'none'; }, 150);
     }
   }, true);
 

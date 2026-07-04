@@ -195,6 +195,7 @@ function normalizeAI(j) {
     verdict: normalizeVerdict(j.verdict || '', lang),
     color: j.color || 'blue',
     dir: j.dir || j.trend_dir || 'flat',
+    analysts: j._analysts || j.analysts || null, // Wall-Street consensus (null for crypto/foreign)
   };
 }
 
@@ -410,8 +411,36 @@ function renderResult(ticker, d, cachedAt) {
   document.getElementById('r-conclusion-box').style.cssText = colorStyle;
   // Forecast block also matches verdict color (was hardcoded green before)
   document.getElementById('r-forecast-box').style.cssText = colorStyle;
+  renderAnalysts(d.analysts);
   drawChartSimulated(d.dir, d.color); // placeholder until real candle data loads
   updateWatchBtn();
+}
+
+// Wall-Street analyst consensus — a compact stacked bar (buy/hold/sell) + counts.
+// Hidden when there are no ratings (crypto, foreign, or Finnhub had none).
+function renderAnalysts(a) {
+  var el = document.getElementById('r-analysts');
+  if (!el) return;
+  var total = a ? (a.strongBuy + a.buy + a.hold + a.sell + a.strongSell) : 0;
+  if (!a || total <= 0) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  var buy = a.strongBuy + a.buy, hold = a.hold, sell = a.sell + a.strongSell;
+  var pc = function (n) { return (n / total * 100).toFixed(0); };
+  var lbl = L('Аналітики', 'Analysts', 'Analystes');
+  var buyT = L('купувати', 'buy', 'acheter'), holdT = L('тримати', 'hold', 'conserver'), sellT = L('продавати', 'sell', 'vendre');
+  el.style.display = 'block';
+  el.innerHTML =
+    '<div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">' +
+      lbl + ' · ' + total + '</div>' +
+    '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--surface3)">' +
+      (buy  ? '<div style="width:' + pc(buy)  + '%;background:var(--green)"></div>' : '') +
+      (hold ? '<div style="width:' + pc(hold) + '%;background:var(--muted)"></div>' : '') +
+      (sell ? '<div style="width:' + pc(sell) + '%;background:var(--red)"></div>' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:12px;margin-top:5px;font-family:var(--mono);font-size:10px">' +
+      '<span style="color:var(--green)">' + buy + ' ' + buyT + '</span>' +
+      '<span style="color:var(--muted)">' + hold + ' ' + holdT + '</span>' +
+      '<span style="color:var(--red)">' + sell + ' ' + sellT + '</span>' +
+    '</div>';
 }
 
 // Chart functions (drawChartLine, fetchRealChart, drawChartFromPrices,
