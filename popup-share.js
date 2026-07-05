@@ -68,19 +68,29 @@ function drawShareCard() {
   ctx.font = '400 23px "Segoe UI", Arial, sans-serif';
   wrapText(ctx, insight, PX, 244, W - PX * 2, 32, 2);
 
-  // Analyst bar (if any)
+  // Fill the mid band: analyst consensus bar when there is coverage, otherwise the
+  // real 30-day chart (reused from #trend-chart) — so ETFs/no-coverage never leave
+  // an awkward gap. bw/bx shared.
   var a = d.analysts;
   var total = a ? (a.strongBuy + a.buy + a.hold + a.sell + a.strongSell) : 0;
-  var yBar = 322;
+  var bw = W - PX * 2, bx = PX, yBar = 322;
   if (a && total > 0) {
     var buy = a.strongBuy + a.buy, hold = a.hold, sell = a.sell + a.strongSell;
-    var bw = W - PX * 2, bx = PX;
     ctx.fillStyle = '#7a7f8a'; ctx.font = '400 16px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(L('Аналітики', 'Analysts', 'Analystes') + ' · ' + total, PX, yBar - 8);
+    ctx.fillText(L('Аналітики', 'Analysts', 'Analystes') + ' · ' + total +
+      '   (' + buy + ' ' + L('купувати', 'buy', 'acheter') + ' · ' + hold + ' ' + L('тримати', 'hold', 'conserver') +
+      ' · ' + sell + ' ' + L('продавати', 'sell', 'vendre') + ')', PX, yBar - 10);
     var seg = function (x, w, col) { rr(ctx, x, yBar, Math.max(0, w), 12, 6); ctx.fillStyle = col; ctx.fill(); };
     seg(bx, bw * buy / total, '#4ade80');
     seg(bx + bw * buy / total, bw * hold / total, '#7a7f8a');
     seg(bx + bw * (buy + hold) / total, bw * sell / total, '#f87171');
+  } else {
+    var tc = document.getElementById('trend-chart');
+    if (tc && tc.width) {
+      ctx.fillStyle = '#7a7f8a'; ctx.font = '400 16px "Segoe UI", Arial, sans-serif';
+      ctx.fillText(L('Тренд 30 днів', '30-day trend', 'Tendance 30 jours'), PX, 300);
+      try { ctx.drawImage(tc, bx, 308, bw, 56); } catch (e) {}
+    }
   }
 
   // Watermark footer
