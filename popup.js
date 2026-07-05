@@ -150,6 +150,8 @@ document.addEventListener('DOMContentLoaded', function() {
       renderPortfolio();
     });
     document.getElementById('pf-add-btn').addEventListener('click', addPortfolioPosition);
+    document.getElementById('pf-import-btn').addEventListener('click', function () { document.getElementById('pf-csv-input').click(); });
+    document.getElementById('pf-csv-input').addEventListener('change', handlePortfolioCSVFile);
     document.getElementById('pf-ticker').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-shares').focus(); });
     document.getElementById('pf-shares').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-buyprice').focus(); });
     document.getElementById('pf-buyprice').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPortfolioPosition(); });
@@ -289,6 +291,11 @@ var I18N_LABELS = [
   // titles
   ['btn-new-chat', 'Новий діалог', 'New chat', 'title'],
   ['btn-conv-list', 'Діалоги', 'Conversations', 'title'],
+  ['lbl-import-csv', 'Імпорт CSV з брокера', 'Import broker CSV'],
+  ['share-btn', '↗ Поділитись', '↗ Share'],
+  ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
+  ['lbl-share-copy', 'Копіювати', 'Copy'],
+  ['lbl-share-dl', 'Завантажити', 'Download'],
   ['share-btn', '↗ Поділитись', '↗ Share'],
   ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
   ['lbl-share-copy', 'Копіювати', 'Copy'],
@@ -320,6 +327,8 @@ var FR_LABELS = {
   'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
+  'lbl-import-csv': 'Importer CSV du courtier', 'lbl-share-title': "Partager l'analyse",
+  'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
   'share-btn': '↗ Partager', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage

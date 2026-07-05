@@ -64,6 +64,68 @@ function addPortfolioPosition() {
   toast(L('✓ Додано ' + ticker, '✓ Added ' + ticker, '✓ Ajouté ' + ticker));
 }
 
+// ── CSV import (broker export → portfolio) — one-click activation, no permissions ──
+// Handles comma/semicolon delimiters + quoted cells; detects columns by header name
+// (Symbol/Ticker, Quantity/Shares, and a cost/price column across common brokers).
+function parseCSV(text) {
+  var lines = text.replace(/\r\n?/g, '\n').split('\n').filter(function (l) { return l.trim(); });
+  if (!lines.length) return [];
+  var delim = lines[0].split(';').length > lines[0].split(',').length ? ';' : ',';
+  return lines.map(function (line) {
+    var cells = [], cur = '', q = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === delim && !q) { cells.push(cur); cur = ''; }
+      else cur += c;
+    }
+    cells.push(cur);
+    return cells.map(function (s) { return s.trim().replace(/^"|"$/g, ''); });
+  });
+}
+
+function importPortfolioCSV(text) {
+  var rows = parseCSV(text);
+  if (rows.length < 2) { toast(L('⚠ Порожній або невірний CSV', '⚠ Empty or invalid CSV', '⚠ CSV vide ou invalide')); return; }
+  var header = rows[0].map(function (h) { return h.toLowerCase(); });
+  var find = function (names) {
+    for (var i = 0; i < header.length; i++) for (var j = 0; j < names.length; j++) if (header[i].indexOf(names[j]) >= 0) return i;
+    return -1;
+  };
+  var iT = find(['symbol', 'ticker', 'instrument']);
+  var iS = find(['quantity', 'shares', 'qty', 'units', 'position']);
+  var iP = find(['average cost', 'avg cost', 'cost basis per share', 'cost per share', 'purchase price', 'unit cost', 'buy price', 'average price', 'price paid', 'price']);
+  if (iT < 0 || iS < 0) { toast(L('⚠ Немає колонок Symbol/Quantity', '⚠ No Symbol/Quantity columns', '⚠ Colonnes Symbol/Quantity manquantes')); return; }
+  var num = function (s) { return parseFloat(String(s || '').replace(/[,$\s]/g, '')); };
+  var added = 0;
+  for (var r = 1; r < rows.length; r++) {
+    var row = rows[r];
+    var ticker = String(row[iT] || '').trim().toUpperCase().replace(/[^A-Z0-9.\-:/]/g, '');
+    var shares = num(row[iS]);
+    var price = iP >= 0 ? num(row[iP]) : NaN;
+    if (!ticker || !/^[A-Z0-9.\-:/]{1,15}$/.test(ticker) || isNaN(shares) || shares <= 0) continue;
+    if (isNaN(price) || price < 0) price = 0; // unknown cost → 0 (user can edit the lot)
+    var lot = { shares: shares, buyPrice: price, addedAt: Date.now() };
+    var ex = portfolio.find(function (p) { return p.ticker === ticker; });
+    if (ex) ex.lots.push(lot); else portfolio.push({ ticker: ticker, lots: [lot] });
+    added++;
+  }
+  savePortfolio();
+  renderPortfolio();
+  toast(added
+    ? L('✓ Імпортовано ' + added, '✓ Imported ' + added, '✓ Importé ' + added)
+    : L('⚠ Нічого не імпортовано', '⚠ Nothing imported', '⚠ Rien à importer'));
+}
+
+function handlePortfolioCSVFile(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () { importPortfolioCSV(String(reader.result || '')); };
+  reader.readAsText(file);
+  e.target.value = ''; // reset so the same file can be re-imported
+}
+
 function removePortfolioPosition(idx) {
   portfolio.splice(idx, 1);
   savePortfolio();
