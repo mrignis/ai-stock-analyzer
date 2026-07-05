@@ -151,7 +151,9 @@ async function main() {
     await page.setInputFiles('#pf-csv-input', { name: 'sample.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
     await page.waitForFunction(() => /AAPL/.test(document.getElementById('portfolio-list')?.textContent || ''), { timeout: 6000 });
     const txt = (await page.textContent('#portfolio-list')) || '';
-    const ok = /AAPL/.test(txt) && /GMIN\.TO/.test(txt) && /BTC/.test(txt) && /150\.25/.test(txt) && !/308/.test(txt.split('AAPL')[1]?.slice(0, 40) || '');
+    // Cost basis 150.25 present proves the cost column won over "Last Price" (308):
+    // had it picked Last Price, the shown cost would be 308.00, not 150.25.
+    const ok = /AAPL/.test(txt) && /GMIN\.TO/.test(txt) && /BTC/.test(txt) && /150\.25/.test(txt);
     await page.screenshot({ path: `${SHOTS}/j6b-csv.png` });
     ok ? pass('CSV import (foreign+crypto, cost-column priority)') : fail('CSV import', txt.slice(0, 140));
   } catch (e) { fail('CSV import', e.message); await page.screenshot({ path: `${SHOTS}/j6b-FAIL.png` }); }
