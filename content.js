@@ -109,11 +109,19 @@
     return card;
   }
   function paint(c, t, d) {
-    var head = '<b style="color:#4ade80;font-family:monospace">' + t + '</b>';
-    if (!d || !d.c) { c.innerHTML = head + ' · ' + L2('нема даних', 'no data', 'aucune donnée'); return; }
-    var pc = d.dp != null ? d.dp : (d.pc > 0 ? ((d.c - d.pc) / d.pc * 100) : 0);
+    // Sanitize the ticker before it enters innerHTML — a hostile page on a matched
+    // finance domain could plant a fake .ais-tk-hl span with a malicious data-ais.
+    var safeT = String(t == null ? '' : t).replace(/[^A-Z0-9.]/gi, '').slice(0, 10);
+    var head = '<b style="color:#4ade80;font-family:monospace">' + safeT + '</b>';
+    // Coerce every injected value to a Number so nothing but digits can enter the
+    // innerHTML (defensive — the data is from our own worker, but keep it airtight).
+    var price = d ? Number(d.c) : NaN;
+    if (!isFinite(price) || price <= 0) { c.innerHTML = head + ' · ' + L2('нема даних', 'no data', 'aucune donnée'); return; }
+    var prev = Number(d.pc);
+    var pc = d.dp != null ? Number(d.dp) : (prev > 0 ? ((price - prev) / prev * 100) : 0);
+    if (!isFinite(pc)) pc = 0;
     var up = pc >= 0, col = up ? '#4ade80' : '#f87171', ar = up ? '▲' : '▼';
-    c.innerHTML = head + ' <span style="font-family:monospace">$' + d.c + '</span> ' +
+    c.innerHTML = head + ' <span style="font-family:monospace">$' + price + '</span> ' +
       '<span style="color:' + col + ';font-family:monospace">' + ar + ' ' + Math.abs(pc).toFixed(2) + '%</span>' +
       '<div style="margin-top:4px;color:#8b93a7;font-size:11px">' +
       L2('Клік — повний аналіз', 'Click for full analysis', "Cliquez pour l'analyse") + '</div>';
