@@ -141,6 +141,21 @@ async function main() {
     pass('watchlist→star→home', `${items} items, ${addT} pinned to home`);
   } catch (e) { fail('watchlist→star→home', e.message); await page.screenshot({ path: `${SHOTS}/j5-FAIL.png` }); }
 
+  // 5b) CSV portfolio import — upload a sample broker export, positions appear.
+  // The CSV puts "Last Price" BEFORE "Average Cost" on purpose: asserting the
+  // cost (150.25) not the last price (308) also verifies the column-priority fix.
+  try {
+    await page.click('#tab-watchlist');
+    await page.click('#wl-tab-pf');
+    const csv = 'Symbol,Last Price,Quantity,Average Cost\nAAPL,308,10,150.25\nGMIN.TO,45,100,40.50\nBTC,62000,0.5,58000\n';
+    await page.setInputFiles('#pf-csv-input', { name: 'sample.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+    await page.waitForFunction(() => /AAPL/.test(document.getElementById('portfolio-list')?.textContent || ''), { timeout: 6000 });
+    const txt = (await page.textContent('#portfolio-list')) || '';
+    const ok = /AAPL/.test(txt) && /GMIN\.TO/.test(txt) && /BTC/.test(txt) && /150\.25/.test(txt) && !/308/.test(txt.split('AAPL')[1]?.slice(0, 40) || '');
+    await page.screenshot({ path: `${SHOTS}/j6b-csv.png` });
+    ok ? pass('CSV import (foreign+crypto, cost-column priority)') : fail('CSV import', txt.slice(0, 140));
+  } catch (e) { fail('CSV import', e.message); await page.screenshot({ path: `${SHOTS}/j6b-FAIL.png` }); }
+
   // 6) Multi-turn chat: ask, then a follow-up
   try {
     await page.click('#tab-chat');

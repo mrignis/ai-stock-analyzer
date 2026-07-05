@@ -88,8 +88,11 @@ function importPortfolioCSV(text) {
   var rows = parseCSV(text);
   if (rows.length < 2) { toast(L('⚠ Порожній або невірний CSV', '⚠ Empty or invalid CSV', '⚠ CSV vide ou invalide')); return; }
   var header = rows[0].map(function (h) { return h.toLowerCase(); });
+  // Match by NAME PRIORITY (names outer): so "average cost" wins over a generic
+  // "price"/"last price" column that may sit earlier in the row — otherwise the
+  // current price gets imported as the cost basis and P&L reads ~0%.
   var find = function (names) {
-    for (var i = 0; i < header.length; i++) for (var j = 0; j < names.length; j++) if (header[i].indexOf(names[j]) >= 0) return i;
+    for (var j = 0; j < names.length; j++) for (var i = 0; i < header.length; i++) if (header[i].indexOf(names[j]) >= 0) return i;
     return -1;
   };
   var iT = find(['symbol', 'ticker', 'instrument']);
