@@ -115,6 +115,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.getElementById('watch-btn').addEventListener('click', toggleWatch);
+
+    // Share card (viral "AI DD Card")
+    document.getElementById('share-btn').addEventListener('click', openShareCard);
+    document.getElementById('share-close').addEventListener('click', closeShareCard);
+    document.getElementById('share-copy').addEventListener('click', copyShareCard);
+    document.getElementById('share-download').addEventListener('click', downloadShareCard);
+    document.getElementById('share-x').addEventListener('click', shareToX);
+    document.getElementById('share-reddit').addEventListener('click', shareToReddit);
+    document.getElementById('share-overlay').addEventListener('click', function (e) { if (e.target.id === 'share-overlay') closeShareCard(); });
     document.getElementById('btn-refresh').addEventListener('click', function() {
       // Force-clear price cache for all watchlist/portfolio tickers so ↻ always fetches fresh
       var keysToRemove = [];
@@ -279,7 +288,11 @@ var I18N_LABELS = [
   ['news-input', 'TSLA, AAPL...', 'TSLA, AAPL...', 'placeholder'],
   // titles
   ['btn-new-chat', 'Новий діалог', 'New chat', 'title'],
-  ['btn-conv-list', 'Діалоги', 'Conversations', 'title']
+  ['btn-conv-list', 'Діалоги', 'Conversations', 'title'],
+  ['share-btn', '↗ Поділитись', '↗ Share'],
+  ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
+  ['lbl-share-copy', 'Копіювати', 'Copy'],
+  ['lbl-share-dl', 'Завантажити', 'Download']
 ];
 
 // French UI strings keyed by element id — added alongside the ua/en columns in
@@ -307,6 +320,8 @@ var FR_LABELS = {
   'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
+  'share-btn': '↗ Partager', 'lbl-share-title': "Partager l'analyse",
+  'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage
   'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...',
 };

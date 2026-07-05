@@ -9,7 +9,7 @@ $out  = Join-Path (Split-Path $root) 'ai-stock-analyzer-store.zip'
 $files = @(
   'manifest.json', 'popup.html', 'background.js', 'content.js', 'icons', 'fonts',
   'core.js', 'popup-charts.js', 'popup-analysis.js', 'popup-news.js',
-  'popup-alerts.js', 'popup-chat.js', 'popup-portfolio.js', 'popup-lists.js', 'popup.js'
+  'popup-alerts.js', 'popup-chat.js', 'popup-portfolio.js', 'popup-lists.js', 'popup-share.js', 'popup.js'
 )
 
 # Sanity check: every script popup.html loads must be in $files

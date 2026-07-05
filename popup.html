@@ -291,7 +291,27 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
       <span class="ticker-big" id="r-ticker"></span>
       <span class="verdict-pill" id="r-verdict"></span>
       <div class="spacer"></div>
+      <button class="add-watch-btn" id="share-btn" style="margin-right:6px">↗ Share</button>
       <button class="add-watch-btn" id="watch-btn">+ Список</button>
+    </div>
+    <!-- Share card overlay (viral "AI DD Card") — filled by popup-share.js -->
+    <div id="share-overlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.72);backdrop-filter:blur(2px);align-items:center;justify-content:center;padding:16px">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px;max-width:340px;width:100%">
+        <div style="display:flex;align-items:center;margin-bottom:10px">
+          <span id="lbl-share-title" style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text)">Поділитися аналізом</span>
+          <div style="flex:1"></div>
+          <button id="share-close" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0 2px">✕</button>
+        </div>
+        <canvas id="share-canvas" width="800" height="418" style="width:100%;border-radius:10px;display:block;margin-bottom:12px"></canvas>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-green" id="share-copy" style="flex:1;min-width:120px;height:34px">📋 <span id="lbl-share-copy">Копіювати</span></button>
+          <button class="btn-outline" id="share-download" style="flex:1;min-width:100px;height:34px">⬇ <span id="lbl-share-dl">Завантажити</span></button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn-outline" id="share-x" style="flex:1;height:32px">𝕏 Post</button>
+          <button class="btn-outline" id="share-reddit" style="flex:1;height:32px">Reddit</button>
+        </div>
+      </div>
     </div>
     <div id="r-fresh" style="display:none;font-family:var(--mono);font-size:9px;color:var(--dim);margin:-2px 0 8px"></div>
     <div class="stats">
@@ -506,6 +526,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 <script src="popup-chat.js"></script>
 <script src="popup-portfolio.js"></script>
 <script src="popup-lists.js"></script>
+<script src="popup-share.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

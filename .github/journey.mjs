@@ -102,6 +102,23 @@ async function main() {
     pass('crypto BTC analyze + add', `${r.ticker}, ${r.price}`);
   } catch (e) { fail('crypto BTC analyze + add', e.message); }
 
+  // 4b) Share card — click Share, the overlay + rendered canvas appear
+  try {
+    await page.click('#share-btn');
+    await page.waitForSelector('#share-overlay', { state: 'visible', timeout: 5000 });
+    const painted = await page.evaluate(() => {
+      const c = document.getElementById('share-canvas');
+      const ctx = c.getContext('2d');
+      const px = ctx.getImageData(0, 0, c.width, c.height).data;
+      let nonBlack = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 60) { nonBlack++; if (nonBlack > 500) break; }
+      return nonBlack > 500; // the card actually drew something
+    });
+    await page.screenshot({ path: `${SHOTS}/j4b-share.png` });
+    await page.click('#share-close');
+    painted ? pass('share card renders') : fail('share card renders', 'canvas looks blank');
+  } catch (e) { fail('share card renders', e.message); await page.screenshot({ path: `${SHOTS}/j4b-FAIL.png` }); }
+
   // 5) Second stock to watchlist, then star it and confirm it shows on home.
   // Use the RESOLVED ticker (#r-ticker) for the selectors — the worker may resolve
   // AAPL to a foreign listing on a Finnhub blip, so the star's data-ticker isn't
