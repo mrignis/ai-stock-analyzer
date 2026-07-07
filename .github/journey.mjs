@@ -139,6 +139,19 @@ async function main() {
       : fail('TradingView full chart', `visible=${info.visible} collapsed=${collapsed} src=${info.src.slice(0, 90)}`);
   } catch (e) { fail('TradingView full chart', e.message); await page.screenshot({ path: `${SHOTS}/j4c-FAIL.png` }); }
 
+  // 4d) Reddit buzz row — rendered after the BTC analysis (worker /social →
+  // ApeWisdom). We only assert the row appears with text; "trending" vs "low buzz"
+  // both render, so the live board never flakes the step.
+  try {
+    await page.waitForFunction(() => {
+      const el = document.getElementById('r-social');
+      return el && el.style.display !== 'none' && el.textContent.trim().length > 0;
+    }, { timeout: 8000 });
+    const txt = await page.locator('#r-social').innerText();
+    await page.screenshot({ path: `${SHOTS}/j4d-social.png` });
+    pass('Reddit buzz row', txt.replace(/\s+/g, ' ').slice(0, 60));
+  } catch (e) { fail('Reddit buzz row', e.message); await page.screenshot({ path: `${SHOTS}/j4d-FAIL.png` }); }
+
   // 5) Second stock to watchlist, then star it and confirm it shows on home.
   // Use the RESOLVED ticker (#r-ticker) for the selectors — the worker may resolve
   // AAPL to a foreign listing on a Finnhub blip, so the star's data-ticker isn't

@@ -360,6 +360,44 @@ function finish(ticker, data, cachedAt) {
   addHistory(ticker, data);
   renderResult(ticker, data, cachedAt);
   fetchRealChart(ticker, data.color);
+  fetchSocialBuzz(ticker);
+}
+
+// Reddit "buzz" signal (worker /social → ApeWisdom). A bonus social-proof row;
+// failures are silent since it's non-essential. Guarded on currentTicker so a
+// slow response for an old ticker never paints over a newer analysis.
+function fetchSocialBuzz(ticker) {
+  var reqT = ticker;
+  var el = document.getElementById('r-social');
+  if (el) el.style.display = 'none'; // hide until we know
+  fetch(WORKER_URL + '/social?ticker=' + encodeURIComponent(ticker))
+    .then(function (r) { return r.json(); })
+    .then(function (s) { if (currentTicker === reqT) renderSocial(s); })
+    .catch(function () {});
+}
+
+function renderSocial(s) {
+  var el = document.getElementById('r-social');
+  if (!el) return;
+  el.style.display = 'block';
+  if (!s || !s.found) {
+    el.innerHTML =
+      '<span class="social-label">💬 ' + L('Соцмережі', 'Social', 'Réseaux') + '</span>' +
+      '<span class="social-quiet">' + L('Низька активність на Reddit зараз', 'Low Reddit buzz right now', 'Faible activité Reddit') + '</span>';
+    return;
+  }
+  // All interpolated values are numbers from the worker JSON — safe for innerHTML.
+  var mom = '';
+  if (s.momentum != null && s.momentum !== 0) {
+    var up = s.momentum > 0;
+    mom = '<span class="social-mom" style="color:' + (up ? 'var(--green)' : 'var(--red)') + '">' +
+      (up ? '▲ +' : '▼ ') + s.momentum + '% 24' + L('г', 'h', 'h') + '</span>';
+  }
+  el.innerHTML =
+    '<span class="social-label">🔥 ' + L('Reddit-хайп', 'Reddit buzz', 'Buzz Reddit') + '</span>' +
+    '<span class="social-rank">#' + s.rank + ' ' + L('у тренді', 'trending', 'tendance') + '</span>' +
+    '<span class="social-sep">·</span>' +
+    '<span>' + s.mentions + ' ' + L('згадок', 'mentions', 'mentions') + '</span>' + mom;
 }
 
 // Freshness stamp under the header (Gemini's council idea): so the user knows how

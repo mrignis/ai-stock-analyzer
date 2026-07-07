@@ -223,6 +223,21 @@ export default {
       if (url.pathname === '/fx' && request.method === 'GET') {
         return await handleFx(request);
       }
+      // Reddit "buzz" signal — slow-moving trending board, cache 10 min
+      if (url.pathname === '/social' && request.method === 'GET') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString());
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+        const res = await handleSocial(request);
+        if (res.status === 200) {
+          const cacheable = new Response(res.body, res);
+          cacheable.headers.set('Cache-Control', 'public, max-age=600');
+          ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+          return cacheable;
+        }
+        return res;
+      }
       return json({ error: 'Not found' }, 404);
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -671,6 +686,40 @@ async function handlePrice(request, env) {
   }
 
   return json(finnhubData || {}); // return whatever Finnhub gave (may be empty)
+}
+
+// ── /social?ticker=TSLA ───────────────────────────────────────────────────────
+// Reddit "hype" signal from ApeWisdom (free, keyless): the top trending tickers
+// across r/wallstreetbets, r/stocks, r/investing & co. Being on the board IS the
+// hype — a ticker not in the top ~100 has low retail buzz by definition, so one
+// cached page-1 fetch answers every ticker. No new extension permission: the
+// worker does the fetch; the popup only ever talks to the worker (its one host).
+async function handleSocial(request) {
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
+  const list = isCrypto ? 'all-crypto' : 'all-stocks';
+  let results;
+  try {
+    const r = await fetchT(`https://apewisdom.io/api/v1.0/filter/${list}/page/1`, {}, 5000);
+    if (!r.ok) return json({ found: false });
+    const data = await r.json();
+    results = (data && data.results) || [];
+  } catch { return json({ found: false }); }
+  // ApeWisdom tags crypto tickers with a ".X" suffix (BTC → BTC.X); stocks are bare.
+  const want = isCrypto ? t + '.X' : t;
+  const item = results.find(x => x.ticker === want);
+  if (!item) return json({ found: false });
+  const prev = item.mentions_24h_ago || 0;
+  const momentum = prev > 0 ? Math.round((item.mentions - prev) / prev * 100) : null;
+  return json({
+    found: true,
+    rank: item.rank,
+    mentions: item.mentions,
+    mentions24hAgo: prev,
+    upvotes: item.upvotes,
+    momentum, // % change in mentions vs 24h ago (null if no prior-day data)
+  });
 }
 
 // ── /analyze ──────────────────────────────────────────────────────────────────
