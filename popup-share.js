@@ -142,13 +142,22 @@ function downloadShareCard() {
   document.body.appendChild(a); a.click(); a.remove();
   toast(L('✓ Завантажено', '✓ Downloaded', '✓ Téléchargé'));
 }
-function shareText() {
-  var v = (currentData && currentData.verdict) || '';
-  return '$' + (currentTicker || '') + ' — AI verdict: ' + v + '. via AI Stock Analyzer';
+// $TICKER is a clickable cashtag on X and boosts discovery. A few rotating hooks
+// (light A/B) keep repeat posts from all reading identical.
+function shareHook() {
+  var t = currentTicker || '', v = (currentData && currentData.verdict) || '';
+  var hooks = [
+    '$' + t + ' — AI verdict: ' + v + '.',
+    'My AI just rated $' + t + ': ' + v + '.',
+    '$' + t + ' AI analysis → ' + v + '.',
+  ];
+  return hooks[Math.floor(Math.random() * hooks.length)];
 }
+function shareText() { return shareHook() + ' via AI Stock Analyzer'; } // Reddit title (hashtags do nothing there)
 function shareToX() {
   copyShareCard();
-  var u = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText() + '\n') + '&url=' + encodeURIComponent(STORE_URL);
+  var text = shareHook() + ' Free AI stock DD 👇 #stocks #investing\n';
+  var u = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(STORE_URL);
   chrome.tabs.create({ url: u });
 }
 function shareToReddit() {

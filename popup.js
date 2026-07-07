@@ -297,10 +297,6 @@ var I18N_LABELS = [
   ['share-btn', '↗ Поділитись', '↗ Share'],
   ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
   ['lbl-share-copy', 'Копіювати', 'Copy'],
-  ['lbl-share-dl', 'Завантажити', 'Download'],
-  ['share-btn', '↗ Поділитись', '↗ Share'],
-  ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
-  ['lbl-share-copy', 'Копіювати', 'Copy'],
   ['lbl-share-dl', 'Завантажити', 'Download']
 ];
 
