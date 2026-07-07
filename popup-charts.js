@@ -137,10 +137,14 @@ function toggleTradingView() {
     return;
   }
   if (!box.firstChild) {
+    // Clean, price-only look (Pylyp): hide_legend drops the O/H/L/C + "Vol" readout,
+    // hide_top_toolbar drops the interval/tools bar, hide_volume drops the volume
+    // bars, hide_side_toolbar drops the drawing rail. Just the price candles remain.
     var src = 'https://www.tradingview.com/widgetembed/?frameElementId=tv_chart' +
       '&symbol=' + encodeURIComponent(tvSymbol(currentTicker)) +
-      '&interval=D&hide_side_toolbar=1&symbol_edit=0&allow_symbol_change=0' +
-      '&save_image=0&withdateranges=1&theme=dark&style=1&timezone=Etc/UTC' +
+      '&interval=D&hide_side_toolbar=1&hide_top_toolbar=1&hide_legend=1&hide_volume=1' +
+      '&symbol_edit=0&allow_symbol_change=0&details=0&save_image=0' +
+      '&theme=dark&style=1&timezone=Etc/UTC' +
       '&locale=' + tvLocale();
     var f = document.createElement('iframe');
     f.src = src;
