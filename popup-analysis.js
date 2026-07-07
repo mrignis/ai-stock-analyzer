@@ -424,6 +424,7 @@ function renderResult(ticker, d, cachedAt) {
   // Forecast block also matches verdict color (was hardcoded green before)
   document.getElementById('r-forecast-box').style.cssText = colorStyle;
   renderAnalysts(d.analysts);
+  resetTradingView(); // collapse any prior ticker's full chart
   drawChartSimulated(d.dir, d.color); // placeholder until real candle data loads
   updateWatchBtn();
 }

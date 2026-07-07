@@ -119,6 +119,26 @@ async function main() {
     painted ? pass('share card renders') : fail('share card renders', 'canvas looks blank');
   } catch (e) { fail('share card renders', e.message); await page.screenshot({ path: `${SHOTS}/j4b-FAIL.png` }); }
 
+  // 4c) TradingView full chart — toggle it open on the BTC result, assert the
+  // iframe mounts with the exchange-qualified symbol (BTC → BINANCE:BTCUSDT), then
+  // toggle it closed. We check the iframe src, not TradingView's network load, so
+  // the step never flakes on a slow third-party frame.
+  try {
+    await page.click('#tv-toggle');
+    await page.waitForSelector('#tv-chart-box iframe', { state: 'attached', timeout: 5000 });
+    const info = await page.evaluate(() => {
+      const box = document.getElementById('tv-chart-box');
+      const f = box && box.querySelector('iframe');
+      return { visible: box && getComputedStyle(box).display !== 'none', src: (f && f.src) || '' };
+    });
+    const okSym = info.src.includes('BINANCE%3ABTCUSDT') && info.src.includes('tradingview.com/widgetembed');
+    await page.screenshot({ path: `${SHOTS}/j4c-tvchart.png` });
+    await page.click('#tv-toggle'); // collapse again
+    const collapsed = await page.evaluate(() => getComputedStyle(document.getElementById('tv-chart-box')).display === 'none');
+    (info.visible && okSym && collapsed) ? pass('TradingView full chart', 'BTC → BINANCE:BTCUSDT, toggles')
+      : fail('TradingView full chart', `visible=${info.visible} collapsed=${collapsed} src=${info.src.slice(0, 90)}`);
+  } catch (e) { fail('TradingView full chart', e.message); await page.screenshot({ path: `${SHOTS}/j4c-FAIL.png` }); }
+
   // 5) Second stock to watchlist, then star it and confirm it shows on home.
   // Use the RESOLVED ticker (#r-ticker) for the selectors — the worker may resolve
   // AAPL to a foreign listing on a Finnhub blip, so the star's data-ticker isn't

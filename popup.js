@@ -117,6 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('watch-btn').addEventListener('click', toggleWatch);
 
     // Share card (viral "AI DD Card")
+    document.getElementById('tv-toggle').addEventListener('click', toggleTradingView);
     document.getElementById('share-btn').addEventListener('click', openShareCard);
     document.getElementById('share-close').addEventListener('click', closeShareCard);
     document.getElementById('share-copy').addEventListener('click', copyShareCard);
@@ -256,6 +257,7 @@ var I18N_LABELS = [
   ['lbl-trend', 'Тренд', 'Trend'],
   ['lbl-for', 'Для кого', 'Best for'],
   ['lbl-chart', 'Тренд (30д)', 'Trend (30d)'],
+  ['lbl-tvchart', 'Повний графік', 'Full chart'],
   ['lbl-what', 'Що робить компанія', 'What the company does'],
   ['lbl-risks', 'Головні ризики', 'Key risks'],
   ['lbl-forecast', 'AI Прогноз', 'AI Forecast'],
@@ -312,6 +314,7 @@ var FR_LABELS = {
   'lbl-home-wl': 'Liste', 'lbl-home-news': 'Actualités du marché',
   'r-disclaimer': 'Pas un conseil financier.', 'lbl-sector': 'Secteur', 'lbl-risk': 'Risque',
   'lbl-trend': 'Tendance', 'lbl-for': 'Idéal pour', 'lbl-chart': 'Tendance (30j)',
+  'lbl-tvchart': 'Graphique complet',
   'lbl-what': "Ce que fait l'entreprise", 'lbl-risks': 'Risques clés',
   'lbl-forecast': 'Prévision IA', 'lbl-conclusion': 'Conclusion IA',
   'wl-tab-pf': '💼 Portefeuille', 'lbl-add-position': 'Ajouter une position', 'pf-add-btn': '+ Ajouter',

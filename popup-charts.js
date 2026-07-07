@@ -99,6 +99,69 @@ function drawChartSimulated(dir, color) {
   drawChartLine(canvas, pts, CHART_COLORS[color] || '#60a5fa', (pts[29].y - pts[0].y) / pts[0].y * -100);
 }
 
+// ── TradingView full chart ──────────────────────────────────────────────────
+// Opt-in interactive chart, lazy-loaded in an iframe only when the user clicks
+// "Full chart". No external script (CSP script-src 'self' forbids tv.js) — we
+// build the widgetembed URL ourselves. No host_permissions needed: framing a
+// third-party page isn't governed by connect-src, only frame-src (see manifest).
+
+// Mirror of worker's CRYPTO_MAP — TradingView needs the exchange-qualified symbol.
+var TV_CRYPTO = {
+  BTC:'BINANCE:BTCUSDT', ETH:'BINANCE:ETHUSDT', SOL:'BINANCE:SOLUSDT', BNB:'BINANCE:BNBUSDT',
+  XRP:'BINANCE:XRPUSDT', ADA:'BINANCE:ADAUSDT', DOGE:'BINANCE:DOGEUSDT', DOT:'BINANCE:DOTUSDT',
+  AVAX:'BINANCE:AVAXUSDT', MATIC:'BINANCE:MATICUSDT', LINK:'BINANCE:LINKUSDT', UNI:'BINANCE:UNIUSDT',
+  TRX:'BINANCE:TRXUSDT',
+};
+// Foreign/TSX suffixes → TradingView exchange prefix (SHOP.TO → TSX:SHOP).
+var TV_EXCHANGE = { '.TO':'TSX', '.V':'TSXV', '.L':'LSE', '.AX':'ASX', '.NE':'NEO', '.NS':'NSE' };
+
+function tvSymbol(ticker) {
+  var t = (ticker || '').toUpperCase();
+  if (TV_CRYPTO[t]) return TV_CRYPTO[t];
+  for (var suf in TV_EXCHANGE) {
+    if (t.length > suf.length && t.slice(-suf.length) === suf) return TV_EXCHANGE[suf] + ':' + t.slice(0, -suf.length);
+  }
+  return t; // bare US ticker — TradingView resolves NASDAQ/NYSE itself
+}
+
+function tvLocale() { return lang === 'ua' ? 'uk' : (lang === 'fr' ? 'fr' : 'en'); }
+
+function toggleTradingView() {
+  var box = document.getElementById('tv-chart-box');
+  var btn = document.getElementById('tv-toggle');
+  if (!box || !currentTicker) return;
+  var isOpen = box.style.display !== 'none' && box.style.display !== '';
+  if (isOpen) {
+    box.style.display = 'none';
+    if (btn) btn.classList.remove('open');
+    return;
+  }
+  if (!box.firstChild) {
+    var src = 'https://www.tradingview.com/widgetembed/?frameElementId=tv_chart' +
+      '&symbol=' + encodeURIComponent(tvSymbol(currentTicker)) +
+      '&interval=D&hide_side_toolbar=1&symbol_edit=0&allow_symbol_change=0' +
+      '&save_image=0&withdateranges=1&theme=dark&style=1&timezone=Etc/UTC' +
+      '&locale=' + tvLocale();
+    var f = document.createElement('iframe');
+    f.src = src;
+    f.title = 'TradingView chart';
+    f.setAttribute('scrolling', 'no');
+    f.setAttribute('allowtransparency', 'true');
+    box.appendChild(f);
+  }
+  box.style.display = 'block';
+  if (btn) btn.classList.add('open');
+}
+
+// Collapse + drop the old iframe when a new analysis renders, so the next open
+// builds a fresh chart for the new ticker (and we don't ship an offscreen frame).
+function resetTradingView() {
+  var box = document.getElementById('tv-chart-box');
+  var btn = document.getElementById('tv-toggle');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  if (btn) btn.classList.remove('open');
+}
+
 // Tiny sparkline for the market cards — thin line + soft fill, green/red by trend
 function drawSpark(canvasId, prices, up) {
   var canvas = document.getElementById(canvasId);
