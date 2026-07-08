@@ -159,6 +159,36 @@ function loadFxRate(cb) {
   });
 }
 
+// USD→currency rate for an ARBITRARY currency (not just the display one). A mixed
+// portfolio holds e.g. CAD (TSX) + USD (NYSE) positions; to value them in one base
+// we need each native currency's rate. Cached like loadFxRate (1h). cb(rate); 1 for USD.
+var _usdRates = { USD: 1 };
+function getUsdRate(cur, cb) {
+  cur = (cur || 'USD').toUpperCase();
+  if (_usdRates[cur] != null) { cb(_usdRates[cur]); return; }
+  cacheGet('fx_' + cur, CACHE_FX_TTL, function(cached) {
+    if (cached) { _usdRates[cur] = cached; cb(cached); return; }
+    fetch(WORKER_URL + '/fx?to=' + cur)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var rate = (d && d.rate > 0) ? d.rate : 1;
+        _usdRates[cur] = rate;
+        if (d && d.rate > 0) cacheSet('fx_' + cur, rate);
+        cb(rate);
+      })
+      .catch(function() { cb(1); });
+  });
+}
+// Load USD→cur for a list of currencies, then cb({CUR: rate}). Used to value a
+// mixed-currency portfolio before rendering (so avg cost + totals convert cleanly).
+function loadRates(curs, cb) {
+  var map = {}, pending = curs.length;
+  if (!pending) { cb(map); return; }
+  curs.forEach(function(c) {
+    getUsdRate(c, function(rate) { map[(c || 'USD').toUpperCase()] = rate; if (--pending === 0) cb(map); });
+  });
+}
+
 // Maps verdict color to its pill CSS class
 function pillClass(color) {
   return { green: 'pill-green', yellow: 'pill-yellow', red: 'pill-red', blue: 'pill-blue' }[color] || 'pill-blue';

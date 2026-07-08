@@ -198,6 +198,25 @@ async function main() {
     ok ? pass('CSV import (foreign+crypto, cost-column priority)') : fail('CSV import', txt.slice(0, 140));
   } catch (e) { fail('CSV import', e.message); await page.screenshot({ path: `${SHOTS}/j6b-FAIL.png` }); }
 
+  // 5c) Wealthsimple-style CSV — cost basis is Book Value / Quantity, NOT the
+  // current "Market Price" (that bug made a CAD holding read as a ~30% loss).
+  // Clear first (also exercises the new clear button) so we don't stack on 5b.
+  try {
+    page.once('dialog', d => d.accept()); // confirm() in clearPortfolio
+    await page.click('#pf-clear-btn');
+    await page.waitForFunction(() => !/AAPL/.test(document.getElementById('portfolio-list')?.textContent || ''), { timeout: 4000 }).catch(() => {});
+    const ws = 'Symbol,Exchange,Quantity,Market Price,Market Price Currency,Book Value (Market),Book Value Currency (Market)\n'
+             + 'WMTX,NYSE,10,999,USD,500,USD\nCNQ,TSX,10,57.74,CAD,530,CAD\n';
+    await page.setInputFiles('#pf-csv-input', { name: 'ws.csv', mimeType: 'text/csv', buffer: Buffer.from(ws) });
+    await page.waitForFunction(() => /WMTX/.test(document.getElementById('portfolio-list')?.textContent || ''), { timeout: 6000 });
+    const txt = (await page.textContent('#portfolio-list')) || '';
+    // Cost = Book Value 500 / 10 = $50.00 (USD display); the Market Price 999 must
+    // NOT appear as the cost. CNQ present confirms the TSX row imported too.
+    const ok = /WMTX/.test(txt) && /50\.00/.test(txt) && !/999/.test(txt) && /CNQ/.test(txt);
+    await page.screenshot({ path: `${SHOTS}/j6c-ws-csv.png` });
+    ok ? pass('Wealthsimple CSV (Book Value cost, not Market Price)') : fail('Wealthsimple CSV', txt.slice(0, 160));
+  } catch (e) { fail('Wealthsimple CSV', e.message); await page.screenshot({ path: `${SHOTS}/j6c-FAIL.png` }); }
+
   // 6) Multi-turn chat: ask, then a follow-up
   try {
     await page.click('#tab-chat');

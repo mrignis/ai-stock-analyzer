@@ -7,6 +7,18 @@
 
 function savePortfolio() { save({ portfolio: portfolio }); }
 
+// Exchange → ticker suffix (for the live-price fetch) and native currency. A TSX
+// holding must be priced as CNQ.TO (CAD), not the US listing CNQ (USD), or its
+// CAD cost basis reads as a ~30% "loss" that's really just the USD/CAD rate.
+var PF_EXCH_SUFFIX = { TSX: '.TO', TSXV: '.V', CVE: '.V', NEO: '.NE', CSE: '.CN', LSE: '.L', ASX: '.AX', NSE: '.NS' };
+var PF_EXCH_CCY    = { TSX: 'CAD', TSXV: 'CAD', CVE: 'CAD', NEO: 'CAD', CSE: 'CAD', LSE: 'GBP', ASX: 'AUD', NSE: 'INR' };
+// Same, keyed by a suffix already on the ticker (manual add of "CNQ.TO").
+var PF_SUFFIX_CCY  = { '.TO': 'CAD', '.V': 'CAD', '.NE': 'CAD', '.CN': 'CAD', '.L': 'GBP', '.AX': 'AUD', '.NS': 'INR' };
+function ccyForTicker(ticker) {
+  var m = /(\.[A-Z]{1,2})$/.exec(ticker);
+  return (m && PF_SUFFIX_CCY[m[1]]) || 'USD';
+}
+
 // Wealthsimple-style model: one position per ticker, individual buys kept
 // as "lots" inside it. Migrates old flat records on startup.
 function migratePortfolioToLots() {
@@ -53,7 +65,10 @@ function addPortfolioPosition() {
   if (existing) {
     existing.lots.push(lot);
   } else {
-    portfolio.push({ ticker: ticker, lots: [lot] });
+    // A ".TO"/".L"/… suffix tells us the native currency; the buy price the user
+    // typed is in that currency, and the live price fetch uses the same symbol.
+    var cur = ccyForTicker(ticker);
+    portfolio.push({ ticker: ticker, sym: ticker, cur: cur, lots: [lot] });
   }
   savePortfolio();
   document.getElementById('pf-ticker').value = '';
@@ -95,8 +110,17 @@ function importPortfolioCSV(text) {
     for (var j = 0; j < names.length; j++) for (var i = 0; i < header.length; i++) if (header[i].indexOf(names[j]) >= 0) return i;
     return -1;
   };
+  var has = function (sub) { for (var i = 0; i < header.length; i++) if (header[i].indexOf(sub) >= 0) return i; return -1; };
   var iT = find(['symbol', 'ticker', 'instrument']);
-  var iS = find(['quantity', 'shares', 'qty', 'units', 'position']);
+  var iS = find(['quantity', 'shares', 'qty', 'units']); // NOT 'position' — matches "Position Direction"
+  // Wealthsimple-style broker export: has Exchange + a total "Book Value" (native)
+  // → real cost/share = Book Value / Quantity, currency + listing from those cols.
+  var iExch = has('exchange');
+  var iBook = has('book value (market)'); // total cost in the position's native ccy
+  var iBookCcy = has('book value currency (market)');
+  var iMktCcy = has('market price currency');
+  // Generic per-share cost column (Fidelity/Schwab/…). Cost names first; bare
+  // 'price' is the last resort and is only reached when no Book Value exists.
   var iP = find(['average cost', 'avg cost', 'cost basis per share', 'cost per share', 'purchase price', 'unit cost', 'buy price', 'average price', 'price paid', 'price']);
   if (iT < 0 || iS < 0) { toast(L('⚠ Немає колонок Symbol/Quantity', '⚠ No Symbol/Quantity columns', '⚠ Colonnes Symbol/Quantity manquantes')); return; }
   var num = function (s) { return parseFloat(String(s || '').replace(/[,$\s]/g, '')); };
@@ -105,12 +129,36 @@ function importPortfolioCSV(text) {
     var row = rows[r];
     var ticker = String(row[iT] || '').trim().toUpperCase().replace(/[^A-Z0-9.\-:/]/g, '');
     var shares = num(row[iS]);
-    var price = iP >= 0 ? num(row[iP]) : NaN;
     if (!ticker || !/^[A-Z0-9.\-:/]{1,15}$/.test(ticker) || isNaN(shares) || shares <= 0) continue;
+
+    var exch = iExch >= 0 ? String(row[iExch] || '').toUpperCase().trim() : '';
+    var suffix = PF_EXCH_SUFFIX[exch] || '';
+    // Native currency: prefer the CSV's currency column, else infer from exchange,
+    // else a suffix already on the symbol, else USD.
+    var cur = (iBookCcy >= 0 && row[iBookCcy]) ? String(row[iBookCcy]).toUpperCase().trim()
+            : (iMktCcy >= 0 && row[iMktCcy]) ? String(row[iMktCcy]).toUpperCase().trim()
+            : PF_EXCH_CCY[exch] || ccyForTicker(ticker);
+    // Per-share cost: Book Value / Quantity (real cost) wins; else a cost column;
+    // never the current "Market Price".
+    var price = NaN;
+    if (iBook >= 0) { var bv = num(row[iBook]); if (!isNaN(bv) && shares > 0) price = bv / shares; }
+    if (isNaN(price) && iP >= 0) price = num(row[iP]);
     if (isNaN(price) || price < 0) price = 0; // unknown cost → 0 (user can edit the lot)
+    // Symbol to fetch the live price in the SAME currency as the cost basis.
+    var sym = suffix ? ticker + suffix : ticker;
+
     var lot = { shares: shares, buyPrice: price, addedAt: Date.now() };
-    var ex = portfolio.find(function (p) { return p.ticker === ticker; });
-    if (ex) ex.lots.push(lot); else portfolio.push({ ticker: ticker, lots: [lot] });
+    var ex = portfolio.find(function (p) { return p.ticker === ticker && (p.cur || 'USD') === cur; });
+    if (ex) {
+      // Idempotent re-import: a holdings snapshot has one row per position, so skip
+      // a lot that's already there (same shares+cost) instead of doubling it.
+      var dup = ex.lots.some(function (l) { return l.shares === shares && l.buyPrice === price; });
+      if (dup) continue;
+      if (!ex.sym) ex.sym = sym; if (!ex.cur) ex.cur = cur;
+      ex.lots.push(lot);
+    } else {
+      portfolio.push({ ticker: ticker, sym: sym, cur: cur, lots: [lot] });
+    }
     added++;
   }
   savePortfolio();
@@ -127,6 +175,17 @@ function handlePortfolioCSVFile(e) {
   reader.onload = function () { importPortfolioCSV(String(reader.result || '')); };
   reader.readAsText(file);
   e.target.value = ''; // reset so the same file can be re-imported
+}
+
+// Wipe the whole portfolio (confirm first) — needed to re-import a broker CSV
+// cleanly instead of stacking duplicate positions on top of the old ones.
+function clearPortfolio() {
+  if (!portfolio.length) return;
+  if (!confirm(L('Очистити весь портфель?', 'Clear the whole portfolio?', 'Vider tout le portefeuille ?'))) return;
+  portfolio = [];
+  savePortfolio();
+  renderPortfolio();
+  toast(L('✓ Портфель очищено', '✓ Portfolio cleared', '✓ Portefeuille vidé'));
 }
 
 function removePortfolioPosition(idx) {
@@ -156,12 +215,20 @@ function renderPortfolio() {
     return;
   }
 
+  // A mixed-currency portfolio (TSX in CAD + NYSE in USD) is valued in one base:
+  // convert every native amount → USD, then fmtMoney renders it in the toggle
+  // currency. Pre-load USD→ccy for each native currency held so the avg-cost row
+  // (rendered up front, before prices) already converts correctly.
+  var curSet = {}; portfolio.forEach(function(p) { curSet[(p.cur || 'USD').toUpperCase()] = 1; });
+  loadRates(Object.keys(curSet), function(rates) {
+    var toUSD = function(amt, cur) { return amt / (rates[(cur || 'USD').toUpperCase()] || 1); };
+
   // Render rows with placeholders, then fetch prices.
   // Main row = position summary; click expands the purchase history (lots).
   var html = '';
   portfolio.forEach(function(p, i) {
     var shares = posShares(p);
-    var avg = shares > 0 ? posInvested(p) / shares : 0;
+    var avg = shares > 0 ? toUSD(posInvested(p), p.cur) / shares : 0;
     var hint = p.lots.length > 1 ? ' ▸ ' + p.lots.length + (L(' покупки', ' buys', ' achats')) : '';
     html += '<div class="pf-row" id="pf-row-' + i + '" data-idx="' + i + '" style="cursor:pointer">' +
       '<span class="pf-ticker">' + p.ticker + '</span>' +
@@ -178,8 +245,8 @@ function renderPortfolio() {
       var date = new Date(l.addedAt).toLocaleDateString(L('uk-UA', 'en-US', 'fr-FR'));
       html += '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim);padding:3px 0">' +
         '<span style="width:70px">' + date + '</span>' +
-        '<span style="color:var(--text)">' + l.shares + ' × ' + fmtMoney(l.buyPrice) + '</span>' +
-        '<span style="margin-left:auto">' + fmtMoney(l.shares * l.buyPrice) + '</span>' +
+        '<span style="color:var(--text)">' + l.shares + ' × ' + fmtMoney(toUSD(l.buyPrice, p.cur)) + '</span>' +
+        '<span style="margin-left:auto">' + fmtMoney(toUSD(l.shares * l.buyPrice, p.cur)) + '</span>' +
         '<button class="pf-lot-remove" data-pos="' + i + '" data-lot="' + j + '" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button>' +
       '</div>';
     });
@@ -216,11 +283,12 @@ function renderPortfolio() {
   portfolio.forEach(function(p, i) {
     // NOTE: totalInvested is accumulated only when a price IS available,
     // so P&L = totalCurrent - totalInvested reflects only priced positions.
-    loadLivePrice(p.ticker, function(d) {
+    // Fetch the listing that matches the cost basis' currency (p.sym, e.g. CNQ.TO
+    // in CAD), then convert to USD so a CAD cost isn't compared to a USD price.
+    loadLivePrice(p.sym || p.ticker, function(d) {
       if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
-      var curPrice = d.c;
-      var invested = posInvested(p);
-      var current  = posShares(p) * curPrice;
+      var invested = toUSD(posInvested(p), p.cur);
+      var current  = toUSD(posShares(p) * d.c, p.cur);
       totalInvested += invested;
       var pl    = current - invested;
       var plPct = invested > 0 ? (pl / invested * 100) : 0;
@@ -228,16 +296,17 @@ function renderPortfolio() {
       var color = up ? 'var(--green)' : 'var(--red)';
       var sign  = up ? '+' : '';
 
-      // Today's change for this position (Wealthsimple-style): shares × (now − prev close)
+      // Today's change (Wealthsimple-style): pct is currency-free; the amount is
+      // shares × (now − prev close), converted to USD like everything else.
       var dayPct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
-      var dayChg = (d.pc && d.pc > 0) ? posShares(p) * (d.c - d.pc) : 0;
+      var dayChg = (d.pc && d.pc > 0) ? toUSD(posShares(p) * (d.c - d.pc), p.cur) : 0;
       totalDayChange += dayChg;
 
       var priceEl = document.getElementById('pf-price-' + i);
       var plEl    = document.getElementById('pf-pl-' + i);
       if (priceEl) {
         var dUp = dayPct >= 0;
-        priceEl.innerHTML = '<span style="color:var(--text)">' + fmtMoney(curPrice) + '</span> ' +
+        priceEl.innerHTML = '<span style="color:var(--text)">' + fmtMoney(toUSD(d.c, p.cur)) + '</span> ' +
           '<span style="font-size:10px;color:' + (dUp ? 'var(--green)' : 'var(--red)') + '">' +
           (dUp ? '▲' : '▼') + Math.abs(dayPct).toFixed(1) + (L('% сьогодні', '% today', " % aujourd'hui")) + '</span>';
       }
@@ -276,4 +345,5 @@ function renderPortfolio() {
       '<div class="pf-sum-item"><div class="pf-sum-lbl">P&L</div><div class="pf-sum-val" style="color:' + color + '">' + sign + fmtMoney(Math.abs(pl)) + ' (' + sign + plPct.toFixed(1) + '%)</div></div>' +
     '</div>' + todayLine + partial;
   }
+  }); // loadRates
 }

@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('pf-add-btn').addEventListener('click', addPortfolioPosition);
     document.getElementById('pf-import-btn').addEventListener('click', function () { document.getElementById('pf-csv-input').click(); });
     document.getElementById('pf-csv-input').addEventListener('change', handlePortfolioCSVFile);
+    document.getElementById('pf-clear-btn').addEventListener('click', clearPortfolio);
     document.getElementById('pf-ticker').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-shares').focus(); });
     document.getElementById('pf-shares').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-buyprice').focus(); });
     document.getElementById('pf-buyprice').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPortfolioPosition(); });
@@ -294,6 +295,7 @@ var I18N_LABELS = [
   ['btn-new-chat', 'Новий діалог', 'New chat', 'title'],
   ['btn-conv-list', 'Діалоги', 'Conversations', 'title'],
   ['lbl-import-csv', 'Імпорт CSV з брокера', 'Import broker CSV'],
+  ['lbl-pf-clear', 'Очистити', 'Clear'],
   ['share-btn', '↗ Поділитись', '↗ Share'],
   ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
   ['lbl-share-copy', 'Копіювати', 'Copy'],
@@ -326,7 +328,7 @@ var FR_LABELS = {
   'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
-  'lbl-import-csv': 'Importer CSV du courtier', 'lbl-share-title': "Partager l'analyse",
+  'lbl-import-csv': 'Importer CSV du courtier', 'lbl-pf-clear': 'Vider', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
   'share-btn': '↗ Partager', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger',
@@ -406,7 +408,9 @@ function showPanel(id) {
   if (id === 'watchlist') {
     var pfVisible = document.getElementById('portfolio-panel').style.display !== 'none';
     if (pfVisible) {
-      var pfTickers = portfolio.map(function(p) { return p.ticker; });
+      // Warm the SAME symbol renderPortfolio fetches (p.sym, e.g. CNQ.TO), or the
+      // cache warms the wrong listing and every row still pays a live fetch.
+      var pfTickers = portfolio.map(function(p) { return p.sym || p.ticker; });
       freshPrices(pfTickers, renderPortfolio);
     } else {
       renderWatchlist();
