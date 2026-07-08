@@ -95,18 +95,22 @@ function loadLivePriceSWR(ticker, cb) {
   });
 }
 
-// Applies live price data to a price + percent element pair
+// Applies live price data to a price + percent element pair. A foreign listing
+// (.TO/.L…) prices in its native currency, so convert to USD first; fmtMoney then
+// renders it in the user's display currency. Percent is currency-free (uses raw d).
 function applyPriceToElements(d, priceId, pctId) {
   if (!d || !d.c || d.c === 0) return;
-  var priceEl = document.getElementById(priceId);
-  var pctEl   = document.getElementById(pctId);
-  if (!priceEl || !pctEl) return;
   var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0;
   var up = pct >= 0;
-  priceEl.textContent = fmtMoney(d.c);
-  priceEl.style.color = 'var(--text)';
-  pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
-  pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+  priceToUSD(d, function(u) {
+    var priceEl = document.getElementById(priceId);
+    var pctEl   = document.getElementById(pctId);
+    if (!priceEl || !pctEl) return;
+    priceEl.textContent = fmtMoney(u.c);
+    priceEl.style.color = 'var(--text)';
+    pctEl.textContent = (up ? '▲' : '▼') + Math.abs(pct).toFixed(1) + '%';
+    pctEl.style.color = up ? 'var(--green)' : 'var(--red)';
+  });
 }
 
 // ── Currency ──────────────────────────────────────────────────────────────────
@@ -187,6 +191,44 @@ function loadRates(curs, cb) {
   curs.forEach(function(c) {
     getUsdRate(c, function(rate) { map[(c || 'USD').toUpperCase()] = rate; if (--pending === 0) cb(map); });
   });
+}
+
+// Ticker-suffix → native currency, a fallback for when a /price payload has no
+// `cur` (an old cached response from before the worker tagged currency). The
+// worker's `cur` is authoritative; this only guesses from an obvious suffix.
+var SUFFIX_CCY = { '.TO': 'CAD', '.V': 'CAD', '.NE': 'CAD', '.CN': 'CAD', '.L': 'GBP', '.AX': 'AUD', '.NS': 'INR' };
+
+// A /price (or _quote) payload prices a listing in its NATIVE currency: US listings
+// are USD, but a foreign one (.TO→CAD, .L→GBP…) is not, and the worker tags it with
+// `cur`. fmtMoney expects USD, so this converts c/pc native→USD and hands back a
+// shallow clone the display code can pass straight to fmtMoney. US payloads (cur
+// absent or USD) pass through untouched. The rate is cached, so cb is near-instant.
+function priceToUSD(d, cb) {
+  if (!d || !d.c) { cb(d); return; }
+  var cur = d.cur ? String(d.cur).toUpperCase() : suffixCcy(d._ticker);
+  if (!cur || cur === 'USD') { cb(d); return; }
+  getUsdRate(cur, function(rate) {
+    rate = rate > 0 ? rate : 1;
+    var o = {}; for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k)) o[k] = d[k];
+    o.c = d.c / rate;
+    if (d.pc != null) o.pc = d.pc / rate;
+    o.cur = 'USD'; o._cur = cur; // _cur = the original native currency (for a chip)
+    cb(o);
+  });
+}
+function suffixCcy(ticker) {
+  var m = /(\.[A-Z]{1,3})$/.exec(String(ticker || '').toUpperCase());
+  return (m && SUFFIX_CCY[m[1]]) || 'USD';
+}
+
+// Synchronous native→USD off the already-loaded rate cache — for rendering a LIST
+// of prices where you've called loadRates() up front for every currency present.
+// Unknown/unloaded currency falls back to 1 (treated as USD) rather than blocking.
+function nativeToUSD(amt, cur) {
+  if (amt == null) return amt;
+  cur = (cur || 'USD').toUpperCase();
+  var r = _usdRates[cur];
+  return (r > 0) ? amt / r : amt;
 }
 
 // Maps verdict color to its pill CSS class
