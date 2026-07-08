@@ -140,16 +140,23 @@ async function main() {
   } catch (e) { fail('TradingView full chart', e.message); await page.screenshot({ path: `${SHOTS}/j4c-FAIL.png` }); }
 
   // 4d) Reddit buzz row — rendered after the BTC analysis (worker /social →
-  // ApeWisdom). We only assert the row appears with text; "trending" vs "low buzz"
-  // both render, so the live board never flakes the step.
+  // ApeWisdom). "trending" vs "low buzz" both render, so the live board never
+  // flakes the step. Visibility is toggled via the .is-hidden class (not inline
+  // display), and we assert the COMPUTED display is flex — an inline display:block
+  // once overrode the CSS flex and collapsed the words together (Pylyp). Guard it.
   try {
     await page.waitForFunction(() => {
       const el = document.getElementById('r-social');
-      return el && el.style.display !== 'none' && el.textContent.trim().length > 0;
+      return el && !el.classList.contains('is-hidden') && el.textContent.trim().length > 0;
     }, { timeout: 8000 });
-    const txt = await page.locator('#r-social').innerText();
+    const info = await page.evaluate(() => {
+      const el = document.getElementById('r-social');
+      return { display: getComputedStyle(el).display, text: el.innerText };
+    });
     await page.screenshot({ path: `${SHOTS}/j4d-social.png` });
-    pass('Reddit buzz row', txt.replace(/\s+/g, ' ').slice(0, 60));
+    (info.display === 'flex')
+      ? pass('Reddit buzz row', info.text.replace(/\s+/g, ' ').slice(0, 60))
+      : fail('Reddit buzz row', `display=${info.display} (expected flex) — gap would be dead`);
   } catch (e) { fail('Reddit buzz row', e.message); await page.screenshot({ path: `${SHOTS}/j4d-FAIL.png` }); }
 
   // 5) Second stock to watchlist, then star it and confirm it shows on home.
