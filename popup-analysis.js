@@ -223,7 +223,8 @@ var SECTOR_FR = {
   'Biotech': 'Biotech', 'Biotechnology': 'Biotechnologie', 'Pharmaceuticals': 'Pharmaceutique',
   'Cloud Computing': 'Cloud', 'Artificial Intelligence': 'Intelligence artificielle',
   'Quantum Computing': 'Informatique quantique', 'Food & Beverage': 'Alimentation & boissons',
-  'Retail': 'Commerce de détail', 'Media': 'Médias', 'Streaming': 'Streaming'
+  'Retail': 'Commerce de détail', 'Media': 'Médias', 'Streaming': 'Streaming',
+  'Financial': 'Financier', 'Cryptocurrency': 'Cryptomonnaie', 'Digital Assets': 'Actifs numériques'
 };
 
 function normalizeVerdict(verdict, lang) {
@@ -319,6 +320,16 @@ function normalizeSector(sector, lang) {
     'фінанси': { ua: 'Фінанси', en: 'Finance' },
     'фінансові послуги': { ua: 'Фінансові послуги', en: 'Financial Services' },
     'фінансовий сектор': { ua: 'Фінанси', en: 'Finance' },
+    'фінансовий': { ua: 'Фінансовий', en: 'Financial' },
+    'financial': { ua: 'Фінансовий', en: 'Financial' },
+    'finance': { ua: 'Фінанси', en: 'Finance' },
+    // Crypto — the AI otherwise labels BTC/ETH "Фінансовий"/"Financial" in the
+    // analysis language, which then never re-localized on a language switch.
+    'cryptocurrency': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
+    'crypto': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
+    'криптовалюта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
+    'крипта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
+    'digital assets': { ua: 'Цифрові активи', en: 'Digital Assets' },
     'гірничодобувна промисловість': { ua: 'Гірничодобувна', en: 'Mining' },
     'гірничодобувна': { ua: 'Гірничодобувна', en: 'Mining' },
     'видобуток': { ua: 'Видобуток', en: 'Mining' },
@@ -344,9 +355,14 @@ function normalizeSector(sector, lang) {
     'медіа': { ua: 'Медіа', en: 'Media' },
     'стрімінг': { ua: 'Стрімінг', en: 'Streaming' },
   };
-  var found = map[sector.toLowerCase()];
+  var sv = sector.toLowerCase();
+  var found = map[sv];
+  // Fully bidirectional: a sector stored in ANY language (a canonical English label
+  // like "Financial Services", or a UA/FR value that isn't itself a key) still
+  // resolves — otherwise switching the UI language left it untranslated.
+  if (!found) { for (var k in map) { if (map[k].en.toLowerCase() === sv || map[k].ua.toLowerCase() === sv) { found = map[k]; break; } } }
   // Reverse-map a sector STORED in French (watchlist saved during FR analysis).
-  if (!found) { var sv = sector.toLowerCase(); for (var k in SECTOR_FR) { if (SECTOR_FR[k].toLowerCase() === sv) { found = map[k.toLowerCase()]; break; } } }
+  if (!found) { for (var kf in SECTOR_FR) { if (SECTOR_FR[kf].toLowerCase() === sv) { found = map[kf.toLowerCase()]; break; } } }
   var en = found ? found.en : sector;
   if (lang === 'fr') return SECTOR_FR[en] || en; // AI's own FR sector passes through
   return found ? (found[lang] || found.en) : en;

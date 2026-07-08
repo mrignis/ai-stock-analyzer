@@ -160,7 +160,10 @@ function updateWatchBtn() {
 function toggleWatch() {
   if (!currentTicker || !currentData) return;
   if (isInWatch(currentTicker)) { watchlist = watchlist.filter(function(w) { return w.ticker !== currentTicker; }); }
-  else { watchlist.push({ ticker: currentTicker, sector: currentData.sector, verdict: normalizeVerdict(currentData.verdict || '', 'en'), color: currentData.color, t: Date.now() }); }
+  // Store BOTH verdict and sector in a canonical language (EN) so switching the UI
+  // language later re-localizes them — otherwise a stock added while analyzing in
+  // UA kept its Ukrainian sector forever (Pylyp: BTC "Фінансовий" in EN mode).
+  else { watchlist.push({ ticker: currentTicker, sector: normalizeSector(currentData.sector || '', 'en'), verdict: normalizeVerdict(currentData.verdict || '', 'en'), color: currentData.color, t: Date.now() }); }
   save({ watchlist: watchlist }); updateWatchBtn();
 }
 function renderWatchlist() {
