@@ -369,7 +369,7 @@ function finish(ticker, data, cachedAt) {
 function fetchSocialBuzz(ticker) {
   var reqT = ticker;
   var el = document.getElementById('r-social');
-  if (el) el.style.display = 'none'; // hide until we know
+  if (el) el.classList.add('is-hidden'); // hide until we know
   fetch(WORKER_URL + '/social?ticker=' + encodeURIComponent(ticker))
     .then(function (r) { return r.json(); })
     .then(function (s) { if (currentTicker === reqT) renderSocial(s); })
@@ -379,9 +379,10 @@ function fetchSocialBuzz(ticker) {
 function renderSocial(s) {
   var el = document.getElementById('r-social');
   if (!el) return;
-  el.style.display = 'flex'; // MUST be flex, not block — .social-row's gap only
-  // applies to a flex container; an inline display:block silently killed the gap
-  // and collapsed the words together (Pylyp).
+  // Toggle visibility via a class — .social-row owns `display:flex` in CSS, so we
+  // never set inline display (an inline display:block once overrode the flex and
+  // killed the gap, collapsing the words together — Pylyp). Gemini's suggestion.
+  el.classList.remove('is-hidden');
   if (!s || !s.found) {
     el.innerHTML =
       '<span class="social-label">💬 ' + L('Соцмережі', 'Social', 'Réseaux') + '</span>' +
