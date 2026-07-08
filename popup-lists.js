@@ -237,7 +237,9 @@ function renderWatchlist() {
 // ── History ───────────────────────────────────────────────────────────────────
 function addHistory(ticker, data) {
   historyList = historyList.filter(function(h) { return h.ticker !== ticker; });
-  historyList.unshift({ ticker: ticker, color: data.color, verdict: data.verdict, t: Date.now() });
+  // Store the verdict canonically (EN) so history re-localizes on a language switch
+  // (it was stored raw in the analysis language — same bug as the watchlist sector).
+  historyList.unshift({ ticker: ticker, color: data.color, verdict: normalizeVerdict(data.verdict || '', 'en'), t: Date.now() });
   if (historyList.length > 20) historyList = historyList.slice(0, 20);
   save({ history: historyList });
 }

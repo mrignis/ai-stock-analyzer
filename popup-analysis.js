@@ -266,6 +266,9 @@ function normalizeVerdict(verdict, lang) {
     'спад': { ua: 'Спад', en: 'Decline' },
   };
   var found = map[v];
+  // Fully bidirectional: a verdict stored in ANY language (English canonical, or a
+  // UA/FR value that isn't itself a key) still re-localizes on a language switch.
+  if (!found) { for (var mk in map) { if (map[mk].en.toLowerCase() === v || map[mk].ua.toLowerCase() === v) { found = map[mk]; break; } } }
   // A verdict may have been STORED in French (watchlist saved during FR analysis) —
   // reverse-map the French word back to canonical English so it re-localizes.
   if (!found) { for (var k in VERDICT_FR) { if (VERDICT_FR[k].toLowerCase() === v) { found = map[k.toLowerCase()]; break; } } }

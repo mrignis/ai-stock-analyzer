@@ -23,6 +23,8 @@ jobs:
           npm init -y
           npm i playwright
           npx playwright install --with-deps chromium
+      - name: Run i18n localization guard (watchlist/history re-localize on lang switch)
+        run: node .github/i18n.mjs
       - name: Run popup smoke test (xvfb for headed extension load)
         run: xvfb-run -a --server-args="-screen 0 1280x1024x24" node .github/smoke.mjs
       - name: Run user-journey test (name/foreign/crypto, star→home, multi-turn chat)

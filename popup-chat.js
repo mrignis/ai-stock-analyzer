@@ -252,7 +252,7 @@ function appendChatMsg(role, content, isTyping) {
     var copyBtn = document.createElement('button');
     copyBtn.className = 'chat-copy-btn';
     copyBtn.textContent = '⎘';
-    copyBtn.title = 'Copy';
+    copyBtn.title = L('Копіювати', 'Copy', 'Copier');
     copyBtn.addEventListener('click', function() {
       navigator.clipboard.writeText(content).then(function() {
         copyBtn.textContent = '✓';
