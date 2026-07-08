@@ -379,7 +379,9 @@ function fetchSocialBuzz(ticker) {
 function renderSocial(s) {
   var el = document.getElementById('r-social');
   if (!el) return;
-  el.style.display = 'block';
+  el.style.display = 'flex'; // MUST be flex, not block — .social-row's gap only
+  // applies to a flex container; an inline display:block silently killed the gap
+  // and collapsed the words together (Pylyp).
   if (!s || !s.found) {
     el.innerHTML =
       '<span class="social-label">💬 ' + L('Соцмережі', 'Social', 'Réseaux') + '</span>' +
