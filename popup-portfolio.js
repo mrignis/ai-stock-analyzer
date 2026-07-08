@@ -230,10 +230,15 @@ function renderPortfolio() {
     var shares = posShares(p);
     var avg = shares > 0 ? toUSD(posInvested(p), p.cur) / shares : 0;
     var hint = p.lots.length > 1 ? ' ▸ ' + p.lots.length + (L(' покупки', ' buys', ' achats')) : '';
+    // Everything is shown in the display currency, so a foreign holding (e.g. a
+    // CAD/TSX stock while viewing in USD) is otherwise indistinguishable. A tiny
+    // chip flags its native currency when it differs from the one on screen.
+    var nativeCcy = (p.cur || 'USD').toUpperCase();
+    var ccyTag = nativeCcy !== (currency || 'USD') ? ' <span class="pf-ccy">' + nativeCcy + '</span>' : '';
     html += '<div class="pf-row" id="pf-row-' + i + '" data-idx="' + i + '" style="cursor:pointer">' +
       '<span class="pf-ticker">' + p.ticker + '</span>' +
       '<div class="pf-info">' +
-        '<div class="pf-shares">' + shares + ' ' + (L('акцій', 'shares', 'actions')) + ' · ' + fmtMoney(avg) + hint + '</div>' +
+        '<div class="pf-shares">' + shares + ' ' + (L('акцій', 'shares', 'actions')) + ' · ' + fmtMoney(avg) + ccyTag + hint + '</div>' +
         '<div class="pf-prices" id="pf-price-' + i + '" style="color:var(--dim)">—</div>' +
       '</div>' +
       '<div class="pf-pl" id="pf-pl-' + i + '" style="color:var(--dim)">—</div>' +
