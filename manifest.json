@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Stock Analyzer",
-  "version": "2.6",
+  "version": "2.7",
   "description": "AI-powered stock & crypto analyzer. Real-time prices, charts, portfolio tracker, alerts. Free, no API keys needed.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [

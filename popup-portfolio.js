@@ -134,10 +134,12 @@ function importPortfolioCSV(text) {
     var exch = iExch >= 0 ? String(row[iExch] || '').toUpperCase().trim() : '';
     var suffix = PF_EXCH_SUFFIX[exch] || '';
     // Native currency: prefer the CSV's currency column, else infer from exchange,
-    // else a suffix already on the symbol, else USD.
-    var cur = (iBookCcy >= 0 && row[iBookCcy]) ? String(row[iBookCcy]).toUpperCase().trim()
-            : (iMktCcy >= 0 && row[iMktCcy]) ? String(row[iMktCcy]).toUpperCase().trim()
-            : PF_EXCH_CCY[exch] || ccyForTicker(ticker);
+    // else a suffix already on the symbol, else USD. Sanitize to A-Z only — this
+    // value lands in innerHTML (the currency chip), so a stray CSV cell must never
+    // carry markup (defense-in-depth; CSP already blocks script).
+    var cur = ((iBookCcy >= 0 && row[iBookCcy]) ? String(row[iBookCcy])
+            : (iMktCcy >= 0 && row[iMktCcy]) ? String(row[iMktCcy])
+            : PF_EXCH_CCY[exch] || ccyForTicker(ticker)).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 5) || 'USD';
     // Per-share cost: Book Value / Quantity (real cost) wins; else a cost column;
     // never the current "Market Price".
     var price = NaN;
