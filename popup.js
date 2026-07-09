@@ -330,8 +330,6 @@ var FR_LABELS = {
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
   'lbl-import-csv': 'Importer CSV du courtier', 'lbl-pf-clear': 'Vider', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
-  'share-btn': '↗ Partager', 'lbl-share-title': "Partager l'analyse",
-  'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage
   'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...',
 };

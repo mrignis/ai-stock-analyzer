@@ -171,12 +171,14 @@ function getUsdRate(cur, cb) {
     fetch(WORKER_URL + '/fx?to=' + cur)
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        var rate = (d && d.rate > 0) ? d.rate : 1;
-        _usdRates[cur] = rate;
-        if (d && d.rate > 0) cacheSet('fx_' + cur, rate);
+        // 0 signals "rate unknown" — the caller must EXCLUDE the position, not value
+        // it as if 1:1 (a CAD holding shown at the USD rate is a ~30% wrong P&L).
+        // Don't cache a failure, so the next render retries.
+        var rate = (d && d.rate > 0) ? d.rate : 0;
+        if (rate > 0) { _usdRates[cur] = rate; cacheSet('fx_' + cur, rate); }
         cb(rate);
       })
-      .catch(function() { cb(1); });
+      .catch(function() { cb(0); });
   });
 }
 // Load USD→cur for a list of currencies, then cb({CUR: rate}). Used to value a

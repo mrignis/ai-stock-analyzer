@@ -18,6 +18,7 @@ function ccyForTicker(ticker) {
   var m = /(\.[A-Z]{1,2})$/.exec(ticker);
   return (m && PF_SUFFIX_CCY[m[1]]) || 'USD';
 }
+var _pfRenderSeq = 0; // guards against overlapping async renderPortfolio calls
 
 // Wealthsimple-style model: one position per ticker, individual buys kept
 // as "lots" inside it. Migrates old flat records on startup.
@@ -217,13 +218,21 @@ function renderPortfolio() {
     return;
   }
 
+  // Bump a render token so a slow async render (rates+prices) from a previous call
+  // — e.g. the user toggling display currency twice quickly — bails instead of
+  // painting stale rows over the current ones.
+  var myRender = ++_pfRenderSeq;
+
   // A mixed-currency portfolio (TSX in CAD + NYSE in USD) is valued in one base:
   // convert every native amount → USD, then fmtMoney renders it in the toggle
   // currency. Pre-load USD→ccy for each native currency held so the avg-cost row
   // (rendered up front, before prices) already converts correctly.
   var curSet = {}; portfolio.forEach(function(p) { curSet[(p.cur || 'USD').toUpperCase()] = 1; });
   loadRates(Object.keys(curSet), function(rates) {
-    var toUSD = function(amt, cur) { return amt / (rates[(cur || 'USD').toUpperCase()] || 1); };
+    if (myRender !== _pfRenderSeq) return; // a newer render started
+    // rate 0/undefined = FX unknown (fetch failed) → NaN, so the position is shown
+    // as "—" and excluded from totals rather than valued at the wrong (1:1) rate.
+    var toUSD = function(amt, cur) { var rt = rates[(cur || 'USD').toUpperCase()]; return rt > 0 ? amt / rt : NaN; };
 
   // Render rows with placeholders, then fetch prices.
   // Main row = position summary; click expands the purchase history (lots).
@@ -293,9 +302,13 @@ function renderPortfolio() {
     // Fetch the listing that matches the cost basis' currency (p.sym, e.g. CNQ.TO
     // in CAD), then convert to USD so a CAD cost isn't compared to a USD price.
     loadLivePrice(p.sym || p.ticker, function(d) {
+      if (myRender !== _pfRenderSeq) return; // superseded by a newer render
       if (!d || !d.c || d.c === 0) { failed++; pending--; updateSummary(); return; }
       var invested = toUSD(posInvested(p), p.cur);
       var current  = toUSD(posShares(p) * d.c, p.cur);
+      // FX rate unknown (fetch failed) → don't fold a mis-valued position into the
+      // total; treat it like an unavailable price so the summary stays honest.
+      if (isNaN(invested) || isNaN(current)) { failed++; pending--; updateSummary(); return; }
       totalInvested += invested;
       var pl    = current - invested;
       var plPct = invested > 0 ? (pl / invested * 100) : 0;
