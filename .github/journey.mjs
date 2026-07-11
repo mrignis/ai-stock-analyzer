@@ -159,6 +159,24 @@ async function main() {
       : fail('Reddit buzz row', `display=${info.display} (expected flex) — gap would be dead`);
   } catch (e) { fail('Reddit buzz row', e.message); await page.screenshot({ path: `${SHOTS}/j4d-FAIL.png` }); }
 
+  // 4e) Compare A vs B — on the BTC result, open compare, enter AAPL, and assert
+  // the side-by-side grid renders both tickers with data.
+  try {
+    await page.click('#compare-btn');
+    await page.waitForSelector('#compare-overlay', { state: 'visible', timeout: 5000 });
+    await page.fill('#cmp-input', 'AAPL');
+    await page.click('#cmp-go');
+    await page.waitForFunction(() => {
+      const g = document.querySelector('#cmp-result .cmp-grid');
+      return g && /AAPL/.test(g.textContent) && /\$\d/.test(g.textContent);
+    }, { timeout: 30000 });
+    const txt = (await page.textContent('#cmp-result')) || '';
+    await page.screenshot({ path: `${SHOTS}/j4e-compare.png` });
+    const ok = /AAPL/.test(txt) && /BTC/.test(txt) && /\$\d/.test(txt);
+    await page.click('#compare-close');
+    ok ? pass('Compare A vs B', 'BTC vs AAPL grid') : fail('Compare A vs B', txt.slice(0, 120));
+  } catch (e) { fail('Compare A vs B', e.message); await page.screenshot({ path: `${SHOTS}/j4e-FAIL.png` }); }
+
   // 5) Second stock to watchlist, then star it and confirm it shows on home.
   // Use the RESOLVED ticker (#r-ticker) for the selectors — the worker may resolve
   // AAPL to a foreign listing on a Finnhub blip, so the star's data-ticker isn't

@@ -75,6 +75,11 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .loading p{font-size:12px;color:var(--muted);font-family:var(--mono);text-align:center;margin-top:8px}
 .result{display:none}
 .price-box{display:none;align-items:center;flex-wrap:wrap;gap:6px;background:var(--surface2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px;border:1px solid var(--border2)}
+.cmp-grid{display:grid;grid-template-columns:auto 1fr 1fr;gap:7px 10px;align-items:center;font-family:var(--mono);font-size:11px}
+.cmp-grid .cmp-head{display:flex;flex-direction:column;gap:3px;align-items:flex-start;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.cmp-grid .cmp-tk{font-weight:600;color:var(--green);font-size:13px}
+.cmp-grid .cmp-lbl{color:var(--muted);font-size:9px;letter-spacing:0.06em;text-transform:uppercase}
+.cmp-grid .cmp-a,.cmp-grid .cmp-b{color:var(--text)}
 .result-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
 .ticker-big{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--green);letter-spacing:0.08em}
 .verdict-pill{font-family:var(--mono);font-size:10px;font-weight:500;padding:3px 10px;border-radius:20px;letter-spacing:0.06em}
@@ -305,8 +310,24 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
       <span class="ticker-big" id="r-ticker"></span>
       <span class="verdict-pill" id="r-verdict"></span>
       <div class="spacer"></div>
+      <button class="add-watch-btn" id="compare-btn" style="margin-right:6px" title="Compare">⚖</button>
       <button class="add-watch-btn" id="share-btn" style="margin-right:6px">↗ Share</button>
       <button class="add-watch-btn" id="watch-btn">+ Список</button>
+    </div>
+    <!-- Compare A vs B overlay — filled by popup-compare.js -->
+    <div id="compare-overlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.72);backdrop-filter:blur(2px);align-items:center;justify-content:center;padding:16px">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px;max-width:380px;width:100%">
+        <div style="display:flex;align-items:center;margin-bottom:10px">
+          <span id="lbl-compare-title" style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text)">Порівняти</span>
+          <div style="flex:1"></div>
+          <button id="compare-close" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0 2px">✕</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="cmp-input" placeholder="MSFT" style="flex:1"/>
+          <button class="btn-green" id="cmp-go" style="width:96px;flex:none;height:36px;font-size:12px">⚖ <span id="lbl-cmp-go">Порівняти</span></button>
+        </div>
+        <div id="cmp-result"></div>
+      </div>
     </div>
     <!-- Share card overlay (viral "AI DD Card") — filled by popup-share.js -->
     <div id="share-overlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.72);backdrop-filter:blur(2px);align-items:center;justify-content:center;padding:16px">
@@ -549,6 +570,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 <script src="popup-portfolio.js"></script>
 <script src="popup-lists.js"></script>
 <script src="popup-share.js"></script>
+<script src="popup-compare.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

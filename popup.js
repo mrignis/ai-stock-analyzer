@@ -119,6 +119,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Share card (viral "AI DD Card")
     document.getElementById('tv-toggle').addEventListener('click', toggleTradingView);
     document.getElementById('share-btn').addEventListener('click', openShareCard);
+    document.getElementById('compare-btn').addEventListener('click', openCompare);
+    document.getElementById('compare-close').addEventListener('click', closeCompare);
+    document.getElementById('cmp-go').addEventListener('click', runCompare);
+    document.getElementById('cmp-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') runCompare(); });
+    document.getElementById('compare-overlay').addEventListener('click', function (e) { if (e.target.id === 'compare-overlay') closeCompare(); });
     document.getElementById('share-close').addEventListener('click', closeShareCard);
     document.getElementById('share-copy').addEventListener('click', copyShareCard);
     document.getElementById('share-download').addEventListener('click', downloadShareCard);
@@ -299,7 +304,10 @@ var I18N_LABELS = [
   ['share-btn', '↗ Поділитись', '↗ Share'],
   ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
   ['lbl-share-copy', 'Копіювати', 'Copy'],
-  ['lbl-share-dl', 'Завантажити', 'Download']
+  ['lbl-share-dl', 'Завантажити', 'Download'],
+  ['lbl-compare-title', 'Порівняти', 'Compare'],
+  ['lbl-cmp-go', 'Порівняти', 'Compare'],
+  ['cmp-input', 'MSFT', 'MSFT', 'placeholder']
 ];
 
 // French UI strings keyed by element id — added alongside the ua/en columns in
@@ -328,7 +336,8 @@ var FR_LABELS = {
   'pf-shares': 'Actions', 'pf-buyprice': "Prix d'achat $",
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
-  'lbl-import-csv': 'Importer CSV du courtier', 'lbl-pf-clear': 'Vider', 'lbl-share-title': "Partager l'analyse",
+  'lbl-import-csv': 'Importer CSV du courtier', 'lbl-pf-clear': 'Vider',
+  'lbl-compare-title': 'Comparer', 'lbl-cmp-go': 'Comparer', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage
   'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...',
