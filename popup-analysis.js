@@ -158,13 +158,19 @@ function fetchFreshPrice(raw, fallbackData) {
 
 function renderPrice(q) {
   if (!q || !q.c) return;
-  var change = q.pc > 0 ? q.c - q.pc : 0;
-  var pct    = q.pc > 0 ? (change / q.pc) * 100 : 0;
-  showPrice({
-    price: formatPrice(q.c * fxRate),
-    change: (change >= 0 ? '+' : '') + formatChange(change * fxRate),
-    pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
-    currency: currency,
+  // Percent is currency-free; compute it from the raw (native) quote. The price/
+  // change amounts must be converted native→USD (a .TO quote is CAD, .L is GBP)
+  // before fxRate scales them into the display currency — else fmtMoney/formatPrice
+  // would mislabel a foreign price as USD or double-convert it.
+  var pct = q.pc > 0 ? ((q.c - q.pc) / q.pc) * 100 : 0;
+  priceToUSD(q, function(u) {
+    var change = u.pc > 0 ? u.c - u.pc : 0;
+    showPrice({
+      price: formatPrice(u.c * fxRate),
+      change: (change >= 0 ? '+' : '') + formatChange(change * fxRate),
+      pct: (pct >= 0 ? '+' : '') + pct.toFixed(2),
+      currency: currency,
+    });
   });
 }
 

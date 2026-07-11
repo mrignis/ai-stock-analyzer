@@ -34,7 +34,8 @@ function initAlerts() {
       loadLivePrice(w.ticker, function(d) {
         if (d && d.c && d.c > 0) {
           live[w.ticker] = {
-            price: d.c,
+            price: d.c, // native currency; renderAlertPrices converts to display
+            cur: d.cur || 'USD',
             pct: (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc * 100) : 0,
             time: Date.now(),
           };
@@ -124,6 +125,12 @@ function renderAlertPrices(priceAlerts) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><p>' + (L('Додай акції у Watchlist.', 'Add stocks to Watchlist.', 'Ajoutez des actions à la Liste.')) + '</p></div>';
     return;
   }
+  // A foreign listing's last price is stored in its native currency (info.cur);
+  // preload USD→ccy for every currency present so nativeToUSD converts cleanly,
+  // then fmtMoney renders in the display currency. US-only lists load nothing.
+  var curSet = {};
+  watchlist.forEach(function(w) { var i = priceAlerts[w.ticker]; if (i && i.cur) curSet[i.cur.toUpperCase()] = 1; });
+  loadRates(Object.keys(curSet), function() {
   var html = '<div style="margin-top:12px"><p style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">' + (L('Останні ціни', 'Last prices', 'Derniers prix')) + '</p>';
   watchlist.forEach(function(w) {
     var info = priceAlerts[w.ticker];
@@ -134,7 +141,7 @@ function renderAlertPrices(priceAlerts) {
       var up = info.pct >= 0;
       var color = up ? 'var(--green)' : 'var(--red)';
       var arrow = up ? '▲' : '▼';
-      html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + fmtMoney(info.price) + '</span>';
+      html += '<span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + fmtMoney(nativeToUSD(info.price, info.cur)) + '</span>';
       html += '<span style="font-family:var(--mono);font-size:11px;color:' + color + '">' + arrow + ' ' + (up ? '+' : '') + info.pct.toFixed(1) + '%</span>';
       var ago = Math.floor((Date.now() - info.time) / 60000);
       var timeStr = ago < 1 ? L('щойно', 'just now', "à l'instant") : ago + L(' хв тому', 'm ago', ' min');
@@ -146,6 +153,7 @@ function renderAlertPrices(priceAlerts) {
   });
   html += '</div>';
   el.innerHTML = html;
+  }); // loadRates
 }
 
 // Listen for price updates from background

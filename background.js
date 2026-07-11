@@ -36,7 +36,9 @@ function fetchPrice(ticker, cb) {
     .then(function(d) {
       if (!d.c || d.c === 0) { cb(null); return; }
       var pct = (d.pc && d.pc > 0) ? ((d.c - d.pc) / d.pc) * 100 : 0;
-      cb({ price: d.c, pct: pct });
+      // Keep the price in its native currency + tag it (foreign listings aren't USD);
+      // the popup converts to the display currency. Percent alerts are currency-free.
+      cb({ price: d.c, pct: pct, cur: d.cur || 'USD' });
     })
     .catch(function() { cb(null); });
 }
@@ -60,7 +62,7 @@ function checkPrices() {
         if (info) {
           var lastPrice = savedPrices[ticker];
           var now = Date.now();
-          savedPrices[ticker] = { price: info.price, pct: info.pct, time: now };
+          savedPrices[ticker] = { price: info.price, pct: info.pct, time: now, cur: info.cur };
 
           var shouldAlert = false;
           var reason = '';

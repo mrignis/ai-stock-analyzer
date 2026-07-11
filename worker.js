@@ -297,15 +297,17 @@ function pctChange(c, pc) {
 // it — chat uses both so a bare foreign ticker gets live data AND company info
 // instead of the model inventing one. Used by chat so BTC etc. also get live data.
 async function getLivePrice(env, t) {
+  // `cur` = the currency the price is quoted in. Finnhub free tier is US-only (USD);
+  // Yahoo/foreign listings carry their own (CAD, GBP…, pence already normalized).
   const fh = await finnhubQuote(env, CRYPTO_MAP[t] || t);
-  if (fh && fh.c && fh.c > 0) return { c: fh.c, pc: fh.pc, sym: t };
+  if (fh && fh.c && fh.c > 0) return { c: fh.c, pc: fh.pc, sym: t, cur: 'USD' };
   const y = await yahooQuote(CRYPTO_MAP[t] ? t + '-USD' : t);
-  if (y && y.c > 0) return { c: y.c, pc: y.pc, sym: t, name: y.name };
+  if (y && y.c > 0) return { c: y.c, pc: y.pc, sym: t, name: y.name, cur: y.currency || 'USD' };
   // Bare ticker may be a foreign/TSX listing (SAU → SAU.TO) — same probe /price
   // and /analyze use. Skipped for crypto and dotted/long symbols already resolved.
   if (!CRYPTO_MAP[t] && /^[A-Z0-9]{1,6}$/.test(t)) {
     const fx = await probeForeignExchange(t);
-    if (fx && fx.q) return { c: fx.q.c, pc: fx.q.pc, sym: fx.sym, name: fx.name };
+    if (fx && fx.q) return { c: fx.q.c, pc: fx.q.pc, sym: fx.sym, name: fx.name, cur: fx.q.currency || 'USD' };
   }
   return null;
 }
@@ -584,6 +586,18 @@ const CYRILLIC_NAMES = {
   'ДОДЖ':'DOGE','РІПЛ':'XRP','РИПЛ':'XRP',
 };
 
+// Some exchanges quote in a MINOR unit, not the main currency: London in pence
+// (Yahoo currency "GBp"/"GBX"), Johannesburg in cents ("ZAc"), Tel Aviv in agorot
+// ("ILA"). 3079.5 GBp is £30.80, so treating it as 3079.5 GBP would be 100× high.
+// Normalize the price to the MAJOR unit (÷100) and report the major currency, so
+// every caller (price box, watchlist, portfolio) can convert with a plain FX rate.
+const YH_MINOR_UNIT = { GBp: 'GBP', GBX: 'GBP', ZAc: 'ZAR', ILA: 'ILS' };
+function normMinorUnit(c, pc, currency) {
+  const major = currency && YH_MINOR_UNIT[currency];
+  if (major) return { c: c / 100, pc: pc / 100, currency: major };
+  return { c, pc, currency: currency || null };
+}
+
 // ── Yahoo Finance price helper (fallback) ─────────────────────────────────────
 async function yahooQuote(symbol) {
   // Crypto needs -USD suffix (BTC → BTC-USD), stocks stay as-is (SPY, TSLA)
@@ -596,11 +610,13 @@ async function yahooQuote(symbol) {
     const data = await res.json();
     const meta = data?.chart?.result?.[0]?.meta;
     if (!meta) return null;
-    const c  = meta.regularMarketPrice || meta.previousClose || 0;
-    const pc = meta.previousClose || meta.chartPreviousClose || c;
+    let c  = meta.regularMarketPrice || meta.previousClose || 0;
+    let pc = meta.previousClose || meta.chartPreviousClose || c;
     if (!c || c <= 0) return null;
     // name/currency come free in the chart meta — used to resolve foreign tickers
-    return { c, pc, name: meta.longName || meta.shortName || null, currency: meta.currency || null };
+    // and to price them in the right currency (pence→pounds normalized above).
+    const u = normMinorUnit(c, pc, meta.currency);
+    return { c: u.c, pc: u.pc, name: meta.longName || meta.shortName || null, currency: u.currency };
   } catch {
     return null;
   }
@@ -667,13 +683,16 @@ async function handlePrice(request, env) {
   if (!parsed) return json({ error: 'Missing ticker' }, 400);
   const { t, isCrypto } = parsed;
 
-  // Try Finnhub first; if it returns a valid price — use it
+  // Try Finnhub first; if it returns a valid price — use it. Finnhub's free tier is
+  // US-only, so a real Finnhub quote is always USD; the client uses `cur` to know a
+  // foreign listing's price isn't USD and must be converted before display.
   const finnhubData = await finnhubQuote(env, CRYPTO_MAP[t] || t);
-  if (finnhubData && finnhubData.c && finnhubData.c > 0) return json(finnhubData);
+  if (finnhubData && finnhubData.c && finnhubData.c > 0) return json({ ...finnhubData, cur: 'USD' });
 
-  // Finnhub failed or returned zero — fallback to Yahoo Finance
+  // Finnhub failed or returned zero — fallback to Yahoo Finance (carries its own
+  // currency, e.g. CNQ.TO→CAD; London pence already normalized to GBP upstream).
   const yahooData = await yahooQuote(isCrypto ? t + '-USD' : t);
-  if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: pctChange(yahooData.c, yahooData.pc) });
+  if (yahooData) return json({ c: yahooData.c, pc: yahooData.pc, dp: pctChange(yahooData.c, yahooData.pc), cur: yahooData.currency || 'USD' });
 
   // Still nothing — a bare ticker may be a foreign/TSX listing (SAU → SAU.TO).
   // Same exchange probe /analyze uses, so a watchlist tile shows a live price
@@ -682,10 +701,10 @@ async function handlePrice(request, env) {
   // resolved symbol. Skipped for crypto and long/junk inputs.
   if (!isCrypto && /^[A-Z0-9]{1,6}$/.test(t)) {
     const fx = await probeForeignExchange(t);
-    if (fx && fx.q) return json({ c: fx.q.c, pc: fx.q.pc, dp: pctChange(fx.q.c, fx.q.pc), _ticker: fx.sym });
+    if (fx && fx.q) return json({ c: fx.q.c, pc: fx.q.pc, dp: pctChange(fx.q.c, fx.q.pc), _ticker: fx.sym, cur: fx.q.currency || 'USD' });
   }
 
-  return json(finnhubData || {}); // return whatever Finnhub gave (may be empty)
+  return json(finnhubData ? { ...finnhubData, cur: 'USD' } : {}); // whatever Finnhub gave (may be empty)
 }
 
 // ── /social?ticker=TSLA ───────────────────────────────────────────────────────
@@ -847,7 +866,7 @@ async function handleAnalyze(request, env, ctx) {
     // saves crypto and rate-limited moments (BTC regression, caught by Pylyp)
     const lp = await getLivePrice(env, t);
     if (lp && lp.c > 0) {
-      quote = { c: lp.c, pc: lp.pc, dp: pctChange(lp.c, lp.pc) };
+      quote = { c: lp.c, pc: lp.pc, dp: pctChange(lp.c, lp.pc), cur: lp.cur || 'USD' };
     } else {
       return json({ error: 'Unknown ticker: ' + t + '. Check the symbol / Невідомий тікер.' }, 404);
     }
@@ -926,7 +945,9 @@ Return ONLY this JSON structure (all text values in the language above EXCEPT "s
   }
   const resp = json({
     ...analysis,
-    _quote: quote,
+    // Finnhub quotes (US listings) are USD; a foreign fallback quote carries its own
+    // `cur` (set above) so the client converts it like a fresh /price before display.
+    _quote: { ...quote, cur: quote.cur || 'USD' },
     _ticker: t, // resolved symbol — client may have typed a company name
     _name: companyName,
     _country: profile.country || null,

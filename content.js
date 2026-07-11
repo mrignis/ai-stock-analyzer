@@ -121,7 +121,14 @@
     var pc = d.dp != null ? Number(d.dp) : (prev > 0 ? ((price - prev) / prev * 100) : 0);
     if (!isFinite(pc)) pc = 0;
     var up = pc >= 0, col = up ? '#4ade80' : '#f87171', ar = up ? '▲' : '▼';
-    c.innerHTML = head + ' <span style="font-family:monospace">$' + price + '</span> ' +
+    // Label the price in the listing's OWN currency — a .TO quote is CAD, .L is GBP.
+    // This card shows the native exchange price (no display-currency setting here),
+    // so a hardcoded "$" mislabeled every foreign price. `cur` comes from our worker;
+    // sanitize it (A–Z only) before it touches innerHTML. Unknown → bare code prefix.
+    var cur = String(d.cur || 'USD').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+    var CSYM = { USD: '$', CAD: 'CA$', GBP: '£', AUD: 'A$', EUR: '€', INR: '₹', JPY: '¥' };
+    var pfx = CSYM[cur] || (cur ? cur + ' ' : '$');
+    c.innerHTML = head + ' <span style="font-family:monospace">' + pfx + price + '</span> ' +
       '<span style="color:' + col + ';font-family:monospace">' + ar + ' ' + Math.abs(pc).toFixed(2) + '%</span>' +
       '<div style="margin-top:4px;color:#8b93a7;font-size:11px">' +
       L2('Клік — повний аналіз', 'Click for full analysis', "Cliquez pour l'analyse") + '</div>';
