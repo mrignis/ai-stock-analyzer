@@ -217,6 +217,21 @@ export default {
       if (url.pathname === '/news' && request.method === 'GET') {
         return await handleNews(request, env);
       }
+      // AI news mood — one AI call per ticker, slow-moving, cache 30 min
+      if (url.pathname === '/news-sentiment' && request.method === 'GET') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString());
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+        const res = await handleNewsSentiment(request, env);
+        if (res.status === 200) {
+          const cacheable = new Response(res.body, res);
+          cacheable.headers.set('Cache-Control', 'public, max-age=1800');
+          ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+          return cacheable;
+        }
+        return res;
+      }
       if (url.pathname === '/candle' && request.method === 'GET') {
         return await handleCandle(request, env);
       }
@@ -964,33 +979,63 @@ Return ONLY this JSON structure (all text values in the language above EXCEPT "s
 }
 
 // ── /news?ticker=TSLA ────────────────────────────────────────────────────────
+// Shared fetch — used by /news and /news-sentiment so they never disagree.
+async function fetchCompanyNews(env, t) {
+  const res = await fetch(
+    `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(t)}&from=${getDateDaysAgo(7)}&to=${getToday()}&token=${env.FINNHUB_KEY}`
+  );
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 12).map(n => ({
+    headline: n.headline || '',
+    source:   n.source   || '',
+    url:      n.url      || '',
+    datetime: n.datetime || 0,
+    summary:  n.summary  ? n.summary.slice(0, 180) : '',
+  }));
+}
+
 async function handleNews(request, env) {
   const parsed = parseTicker(request);
   if (!parsed) return json({ error: 'Missing ticker' }, 400);
   const { t, isCrypto } = parsed;
   if (isCrypto) return json([]); // Finnhub free tier has no crypto news
+  try { return json(await fetchCompanyNews(env, t)); }
+  catch (e) { return json([]); }
+}
 
-  const today = getToday();
-  const weekAgo = getDateDaysAgo(7);
+// ── /news-sentiment?ticker=TSLA ──────────────────────────────────────────────
+// AI reads the recent headlines and tags each bull/bear/neutral FOR THE STOCK,
+// plus an overall mood. One AI call for the batch; edge-cached 30 min so it's
+// bounded. Language-agnostic (returns codes: bull/bear/neutral) — the client
+// localizes the labels.
+function normSent(s) { s = String(s || '').toLowerCase(); if (s.startsWith('bull') || s === 'positive' || s === 'up') return 'bull'; if (s.startsWith('bear') || s === 'negative' || s === 'down') return 'bear'; return 'neutral'; }
+function normOverall(s) { s = String(s || '').toLowerCase(); if (s.startsWith('bull')) return 'bullish'; if (s.startsWith('bear')) return 'bearish'; return 'neutral'; }
 
+async function handleNewsSentiment(request, env) {
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
+  if (isCrypto) return json({ overall: null, items: [] }); // no crypto news on free tier
+  let news;
+  try { news = await fetchCompanyNews(env, t); } catch { return json({ overall: null, items: [] }); }
+  if (!news.length) return json({ overall: null, items: [] });
+
+  const top = news.slice(0, 8);
+  const list = top.map((n, i) => `${i}. ${n.headline}`).join('\n');
+  const sys = 'You are a financial news sentiment classifier. For the given stock, judge whether each numbered headline is bullish, bearish, or neutral FOR THE STOCK PRICE. Reply ONLY with compact JSON, no markdown, no prose.';
+  const user = `Stock: ${t}\nReturn exactly this JSON shape:\n{"overall":"bullish|bearish|neutral","items":[{"i":0,"s":"bull|bear|neutral"}]}\nHeadlines:\n${list}`;
+  let ai = null;
   try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(t)}&from=${weekAgo}&to=${today}&token=${env.FINNHUB_KEY}`
-    );
-    const raw_news = await res.json();
-    if (!Array.isArray(raw_news)) return json([]);
+    const text = await callAI(env, [{ role: 'system', content: sys }, { role: 'user', content: user }], 0.2, 500);
+    const m = text.replace(/```json\s*/gi, '').replace(/```/g, '').match(/\{[\s\S]*\}/);
+    if (m) ai = JSON.parse(m[0]);
+  } catch (e) { /* AI down → return news with no sentiment rather than failing */ }
 
-    const news = raw_news.slice(0, 12).map(n => ({
-      headline: n.headline || '',
-      source:   n.source   || '',
-      url:      n.url      || '',
-      datetime: n.datetime || 0,
-      summary:  n.summary  ? n.summary.slice(0, 180) : '',
-    }));
-    return json(news);
-  } catch (e) {
-    return json([]);
-  }
+  const smap = {};
+  if (ai && Array.isArray(ai.items)) ai.items.forEach(x => { if (x && typeof x.i === 'number') smap[x.i] = normSent(x.s); });
+  const items = news.map((n, i) => ({ ...n, sentiment: (i < top.length && ai) ? (smap[i] || 'neutral') : null }));
+  return json({ overall: ai ? normOverall(ai.overall) : null, items });
 }
 
 // ── /market-news — general market headlines for the home screen ──────────────

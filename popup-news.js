@@ -94,6 +94,10 @@ function renderNews(ticker, articles) {
   });
   listEl.innerHTML = html;
 
+  // Enrich with AI sentiment in the background — news paints instantly, mood
+  // (overall banner + per-headline bull/bear tint) fills in when the AI replies.
+  fetchNewsMood(ticker);
+
   // Attach click handlers via JS (CSP forbids inline onclick in extensions)
   listEl.querySelectorAll('.news-item[data-url]').forEach(function(item) {
     item.addEventListener('click', function() {
@@ -102,6 +106,62 @@ function renderNews(ticker, articles) {
       var u = this.getAttribute('data-url');
       if (/^https?:\/\//i.test(u)) chrome.tabs.create({ url: u });
     });
+  });
+}
+
+// ── AI news sentiment (bull/bear/neutral per headline + overall mood) ─────────
+// Non-blocking enrichment of the news list. Worker /news-sentiment runs one AI
+// call per ticker (cached 30 min). Codes come back language-agnostic; localized
+// here. All values are our own codes (no AI free-text into innerHTML).
+var SENT_C = { bull: 'var(--green)', bear: 'var(--red)', neutral: 'var(--muted)' };
+function sentWord(s) {
+  return s === 'bull' ? L('Бичача', 'Bullish', 'Haussière')
+       : s === 'bear' ? L('Ведмежа', 'Bearish', 'Baissière')
+       : L('Нейтральна', 'Neutral', 'Neutre');
+}
+function moodWord(o) {
+  return o === 'bullish' ? L('Бичачий', 'Bullish', 'Haussier')
+       : o === 'bearish' ? L('Ведмежий', 'Bearish', 'Baissier')
+       : L('Нейтральний', 'Neutral', 'Neutre');
+}
+function fetchNewsMood(ticker) {
+  cacheGet('mood_' + ticker, CACHE_NEWS_TTL, function(cached) {
+    if (cached) { applyNewsMood(ticker, cached); return; }
+    fetch(WORKER_URL + '/news-sentiment?ticker=' + encodeURIComponent(ticker))
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d && (d.overall || (d.items && d.items.length))) cacheSet('mood_' + ticker, d); applyNewsMood(ticker, d); })
+      .catch(function() {});
+  });
+}
+function applyNewsMood(ticker, d) {
+  if (currentNewsTicker !== ticker || !d) return; // user switched tickers
+  var listEl = document.getElementById('news-list');
+  if (!listEl || listEl.style.display === 'none') return;
+  // Overall mood banner at the top (idempotent — reuse if present)
+  if (d.overall) {
+    var col = SENT_C[d.overall === 'bullish' ? 'bull' : d.overall === 'bearish' ? 'bear' : 'neutral'];
+    var banner = document.getElementById('news-mood');
+    if (!banner) { banner = document.createElement('div'); banner.id = 'news-mood'; banner.className = 'news-mood'; listEl.insertBefore(banner, listEl.firstChild); }
+    banner.style.color = col;
+    banner.innerHTML = '📊 ' + escHtml(L('Настрій новин: ', 'News mood: ', 'Humeur : ')) + '<b>' + escHtml(moodWord(d.overall)) + '</b>';
+  }
+  // Per-headline tint + a small colored tag
+  var map = {}; (d.items || []).forEach(function(it) { if (it.sentiment) map[it.headline] = it.sentiment; });
+  listEl.querySelectorAll('.news-item').forEach(function(item) {
+    var h = item.querySelector('.news-headline'); if (!h) return;
+    var s = map[h.textContent]; if (!s) return;
+    item.style.borderLeft = '2px solid ' + (s === 'neutral' ? 'var(--border2)' : SENT_C[s]);
+    item.style.paddingLeft = '8px';
+    if (!h.querySelector('.news-sent')) {
+      // A colored arrow before the headline (▲ bull / ▼ bear / • neutral) +
+      // title tooltip with the word — no layout disruption to the meta row.
+      var dot = document.createElement('span');
+      dot.className = 'news-sent';
+      dot.style.cssText = 'color:' + SENT_C[s] + ';font-weight:700;margin-right:5px';
+      dot.title = sentWord(s);
+      dot.textContent = s === 'bull' ? '▲' : s === 'bear' ? '▼' : '•';
+      h.insertBefore(dot, h.firstChild);
+    }
   });
 }
 

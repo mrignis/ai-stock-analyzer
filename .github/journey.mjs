@@ -235,6 +235,22 @@ async function main() {
     ok ? pass('Wealthsimple CSV (Book Value cost, not Market Price)') : fail('Wealthsimple CSV', txt.slice(0, 160));
   } catch (e) { fail('Wealthsimple CSV', e.message); await page.screenshot({ path: `${SHOTS}/j6c-FAIL.png` }); }
 
+  // 5d) News + AI sentiment — open news for AAPL, news paints, then the AI mood
+  // banner / per-headline tint enriches it (worker /news-sentiment).
+  try {
+    await page.click('#tab-news');
+    await page.fill('#news-input', 'AAPL');
+    await page.click('#news-search-btn');
+    await page.waitForSelector('#news-list .news-item', { timeout: 20000 });
+    // AI enrichment: overall mood banner OR a per-headline sentiment arrow
+    await page.waitForFunction(() => {
+      return document.getElementById('news-mood') || document.querySelector('#news-list .news-sent');
+    }, { timeout: 40000 });
+    const mood = (await page.textContent('#news-mood').catch(() => '')) || '';
+    await page.screenshot({ path: `${SHOTS}/j5d-news-sentiment.png` });
+    pass('news AI sentiment', mood.replace(/\s+/g, ' ').slice(0, 40));
+  } catch (e) { fail('news AI sentiment', e.message); await page.screenshot({ path: `${SHOTS}/j5d-FAIL.png` }); }
+
   // 6) Multi-turn chat: ask, then a follow-up
   try {
     await page.click('#tab-chat');
