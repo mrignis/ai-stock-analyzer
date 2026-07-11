@@ -114,7 +114,7 @@ function renderHomeWatchlist() {
       '<span class="hwl-price" id="hwp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
       '<canvas class="hwl-spark" id="hwspark-' + w.ticker + '"></canvas>' +
       '<span class="hwl-pct" id="hwpc-' + w.ticker + '"></span>' +
-      '<span class="verdict-pill ' + pill + '" style="font-size:9px">' + normalizeVerdict(w.verdict||'', lang) + '</span>' +
+      '<span class="verdict-pill ' + pill + '" style="font-size:9px">' + escHtml(normalizeVerdict(w.verdict||'', lang)) + '</span>' +
     '</div>';
   });
   itemsEl.innerHTML = html;
@@ -187,10 +187,10 @@ function renderWatchlist() {
       '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
         'style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:0 5px;color:' + (w.home ? 'var(--yellow)' : 'var(--muted)') + '">' + star + '</button>' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
-      '<div class="watch-info"><div class="watch-sector">' + normalizeSector(w.sector || '', lang) + '</div></div>' +
+      '<div class="watch-info"><div class="watch-sector">' + escHtml(normalizeSector(w.sector || '', lang)) + '</div></div>' +
       '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
       '<span class="watch-pct" id="wpc-' + w.ticker + '"></span>' +
-      '<span class="verdict-pill ' + pill + '">' + normalizeVerdict(w.verdict || '', lang) + '</span>' +
+      '<span class="verdict-pill ' + pill + '">' + escHtml(normalizeVerdict(w.verdict || '', lang)) + '</span>' +
       '<button class="watch-remove" data-ticker="' + w.ticker + '">✕</button>' +
     '</div>';
   }
@@ -254,7 +254,7 @@ function renderHistory() {
              : diff < 60   ? diff + L(' хв', 'm ago', ' min')
              : diff < 1440 ? Math.floor(diff / 60) + L(' год', 'h ago', ' h')
              : Math.floor(diff / 1440) + L(' д', 'd ago', ' j');
-    html += '<div class="hist-item" data-ticker="' + h.ticker + '"><span class="hist-ticker">' + h.ticker + '</span><span class="hist-time">' + time + '</span><span class="verdict-pill ' + pill + '">' + normalizeVerdict(h.verdict || '', lang) + '</span></div>';
+    html += '<div class="hist-item" data-ticker="' + h.ticker + '"><span class="hist-ticker">' + h.ticker + '</span><span class="hist-time">' + time + '</span><span class="verdict-pill ' + pill + '">' + escHtml(normalizeVerdict(h.verdict || '', lang)) + '</span></div>';
   }
   el.innerHTML = html;
   var items = el.querySelectorAll('.hist-item');
