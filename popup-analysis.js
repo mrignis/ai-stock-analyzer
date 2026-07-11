@@ -230,7 +230,11 @@ var SECTOR_FR = {
   'Cloud Computing': 'Cloud', 'Artificial Intelligence': 'Intelligence artificielle',
   'Quantum Computing': 'Informatique quantique', 'Food & Beverage': 'Alimentation & boissons',
   'Retail': 'Commerce de détail', 'Media': 'Médias', 'Streaming': 'Streaming',
-  'Financial': 'Financier', 'Cryptocurrency': 'Cryptomonnaie', 'Digital Assets': 'Actifs numériques'
+  'Financial': 'Financier', 'Cryptocurrency': 'Cryptomonnaie', 'Digital Assets': 'Actifs numériques',
+  'Gold': 'Or', 'Silver': 'Argent', 'Oil': 'Pétrole', 'Natural Gas': 'Gaz naturel',
+  'Commodities': 'Matières premières', 'Commodity': 'Matières premières',
+  'Broad Market': 'Marché large', 'Total Market': 'Marché total', 'Emerging Markets': 'Marchés émergents',
+  'Bonds': 'Obligations', 'Treasury': 'Bons du Trésor', 'Dividend': 'Dividende', 'ETF': 'FNB'
 };
 
 function normalizeVerdict(verdict, lang) {
@@ -339,6 +343,25 @@ function normalizeSector(sector, lang) {
     'криптовалюта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
     'крипта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
     'digital assets': { ua: 'Цифрові активи', en: 'Digital Assets' },
+    // ETF / index / commodity fund THEMES — the worker tells the AI to label funds
+    // by their theme (Gold, Broad Market…) instead of a company sector. These must
+    // translate too (Pylyp: GLD showed "Gold"/"Financial Services", untranslated).
+    // Proper index names (S&P 500, Nasdaq 100, Dow Jones) intentionally pass through.
+    'gold': { ua: 'Золото', en: 'Gold' },
+    'silver': { ua: 'Срібло', en: 'Silver' },
+    'oil': { ua: 'Нафта', en: 'Oil' },
+    'crude oil': { ua: 'Нафта', en: 'Oil' },
+    'natural gas': { ua: 'Природний газ', en: 'Natural Gas' },
+    'commodities': { ua: 'Сировина', en: 'Commodities' },
+    'commodity': { ua: 'Сировина', en: 'Commodity' },
+    'broad market': { ua: 'Широкий ринок', en: 'Broad Market' },
+    'total market': { ua: 'Весь ринок', en: 'Total Market' },
+    'emerging markets': { ua: 'Ринки, що розвиваються', en: 'Emerging Markets' },
+    'bonds': { ua: 'Облігації', en: 'Bonds' },
+    'treasury': { ua: 'Казначейські облігації', en: 'Treasury' },
+    'treasuries': { ua: 'Казначейські облігації', en: 'Treasury' },
+    'dividend': { ua: 'Дивідендні', en: 'Dividend' },
+    'etf': { ua: 'Біржовий фонд', en: 'ETF' },
     'гірничодобувна промисловість': { ua: 'Гірничодобувна', en: 'Mining' },
     'гірничодобувна': { ua: 'Гірничодобувна', en: 'Mining' },
     'видобуток': { ua: 'Видобуток', en: 'Mining' },
