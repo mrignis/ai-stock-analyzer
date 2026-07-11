@@ -249,7 +249,14 @@ async function main() {
     const mood = (await page.textContent('#news-mood').catch(() => '')) || '';
     await page.screenshot({ path: `${SHOTS}/j5d-news-sentiment.png` });
     pass('news AI sentiment', mood.replace(/\s+/g, ' ').slice(0, 40));
-  } catch (e) { fail('news AI sentiment', e.message); await page.screenshot({ path: `${SHOTS}/j5d-FAIL.png` }); }
+    // Switching language must re-localize the news panel IMMEDIATELY (not only
+    // after navigating away and back) — the mood banner text should change.
+    if (mood) {
+      await page.click('#lang-btn');
+      await page.waitForFunction((b) => { const m = document.getElementById('news-mood'); return m && m.textContent && m.textContent !== b; }, mood, { timeout: 8000 });
+      pass('news re-localizes on language switch');
+    }
+  } catch (e) { fail('news AI sentiment / re-localize', e.message); await page.screenshot({ path: `${SHOTS}/j5d-FAIL.png` }); }
 
   // 6) Multi-turn chat: ask, then a follow-up
   try {

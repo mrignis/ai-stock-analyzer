@@ -99,6 +99,10 @@ document.addEventListener('DOMContentLoaded', function() {
       if (document.getElementById('portfolio-panel').style.display !== 'none') renderPortfolio();
       renderHistory();
       initAlerts(); // re-render price targets + last prices in the new language
+      // News panel (headlines' "Read article", time-ago, AI mood banner + tags)
+      // must re-localize too — otherwise it stays in the old language until you
+      // navigate away and back (Pylyp: FR switch left "News mood"/"Read article").
+      if (currentNewsTicker && document.getElementById('panel-news').classList.contains('active')) fetchNews(currentNewsTicker);
       if (currentTicker) runAnalysis();
     });
 
