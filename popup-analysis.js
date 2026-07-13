@@ -441,6 +441,17 @@ function normalizeSector(sector, lang) {
   if (!found) { for (var k in map) { if (map[k].en.toLowerCase() === sv || map[k].ua.toLowerCase() === sv) { found = map[k]; break; } } }
   // Reverse-map a sector STORED in French (watchlist saved during FR analysis).
   if (!found) { for (var kf in SECTOR_FR) { if (SECTOR_FR[kf].toLowerCase() === sv) { found = map[kf.toLowerCase()]; break; } } }
+  // Last resort — the AI returned a VARIANT not exactly on the enum (e.g. "Logistics
+  // & Transportation", "Oil & Gas Exploration"). Snap it to the known sector whose
+  // canonical name it contains; longest match wins ("Oil & Gas" beats "Oil"). Keeps
+  // every sector translatable even when the model deviates from the list.
+  if (!found) {
+    var bestLen = 0;
+    for (var kk in map) {
+      var kEn = map[kk].en.toLowerCase();
+      if (kEn.length >= 4 && kEn.length > bestLen && sv.indexOf(kEn) >= 0) { found = map[kk]; bestLen = kEn.length; }
+    }
+  }
   var en = found ? found.en : sector;
   if (lang === 'fr') return SECTOR_FR[en] || en; // AI's own FR sector passes through
   return found ? (found[lang] || found.en) : en;
