@@ -35,7 +35,7 @@ function render(lang) {
   vm.runInContext(fs.readFileSync(ROOT + '/popup-lists.js', 'utf8'), ctx);
   ctx.watchlist = [
     { ticker: 'BTC', sector: 'Фінансовий', verdict: 'Buy', color: 'green' },
-    { ticker: 'SPY', sector: 'Financial Services', verdict: 'Тримати', color: 'yellow' },
+    { ticker: 'BAC', sector: 'Financial Services', verdict: 'Тримати', color: 'yellow' }, // non-ETF: plain localization
     { ticker: 'CNQ', sector: 'Mining', verdict: 'Hold', color: 'yellow' },
     { ticker: 'ETH', sector: 'Cryptocurrency', verdict: 'Купувати', color: 'green' },
     { ticker: 'GLD', sector: 'Gold', verdict: 'Conserver', color: 'yellow' },       // ETF theme — must localize (Золото/Or)

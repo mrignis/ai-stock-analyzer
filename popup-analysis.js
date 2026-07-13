@@ -234,7 +234,12 @@ var SECTOR_FR = {
   'Gold': 'Or', 'Silver': 'Argent', 'Oil': 'Pétrole', 'Natural Gas': 'Gaz naturel',
   'Commodities': 'Matières premières', 'Commodity': 'Matières premières',
   'Broad Market': 'Marché large', 'Total Market': 'Marché total', 'Emerging Markets': 'Marchés émergents',
-  'Bonds': 'Obligations', 'Treasury': 'Bons du Trésor', 'Dividend': 'Dividende', 'ETF': 'FNB'
+  'Bonds': 'Obligations', 'Treasury': 'Bons du Trésor', 'Dividend': 'Dividende', 'ETF': 'FNB',
+  'Software': 'Logiciels', 'Cybersecurity': 'Cybersécurité', 'Telecom': 'Télécoms',
+  'Banking': 'Banques', 'Insurance': 'Assurance', 'Oil & Gas': 'Pétrole et gaz',
+  'Aerospace & Defense': 'Aérospatiale et défense', 'Transportation': 'Transport',
+  'International': 'International', 'Consumer Staples': 'Biens de consommation de base',
+  'Index Fund': 'Fonds indiciel'
 };
 
 function normalizeVerdict(verdict, lang) {
@@ -285,6 +290,30 @@ function normalizeVerdict(verdict, lang) {
   var en = found ? found.en : (verdict.charAt(0).toUpperCase() + verdict.slice(1));
   if (lang === 'fr') return VERDICT_FR[en] || en; // AI's own FR word passes through
   return found ? (found[lang] || found.en) : en;
+}
+
+// Client mirror of the worker's ETF_THEME — a safety net so a known ETF shows its
+// correct theme INSTANTLY, even if a stale edge-cache or an old stored analysis
+// said otherwise (GLD "Index Fund"/"Financial Services"). Keep in sync w/ worker.js.
+var ETF_THEME = {
+  SPY:'S&P 500', SPX:'S&P 500', VOO:'S&P 500', IVV:'S&P 500', SPLG:'S&P 500',
+  QQQ:'Nasdaq 100', QQQM:'Nasdaq 100', DIA:'Dow Jones',
+  VTI:'Broad Market', ITOT:'Broad Market', SCHB:'Broad Market', IWM:'Broad Market', VUG:'Broad Market', VTV:'Broad Market',
+  GLD:'Gold', IAU:'Gold', SGOL:'Gold', GLDM:'Gold', SLV:'Silver', SIVR:'Silver',
+  USO:'Oil', BNO:'Oil', UNG:'Commodities',
+  TLT:'Bonds', IEF:'Bonds', SHY:'Bonds', BND:'Bonds', AGG:'Bonds', LQD:'Bonds', HYG:'Bonds',
+  VEA:'International', VXUS:'International', EFA:'International', VWO:'Emerging Markets', EEM:'Emerging Markets',
+  VYM:'Dividend', VIG:'Dividend', SCHD:'Dividend',
+  VGT:'Technology', XLK:'Technology', SMH:'Semiconductors', SOXX:'Semiconductors',
+  ARKK:'Technology', ARKG:'Biotechnology', XBI:'Biotechnology',
+  XLB:'Materials', XLC:'Communication Services', XLE:'Energy', XLF:'Financial Services',
+  XLI:'Industrials', XLP:'Consumer Staples', XLU:'Utilities', XLV:'Healthcare', XLRE:'Real Estate', XLY:'Consumer Discretionary',
+};
+// The theme for a known ETF ticker, else the given (AI) sector. Strips any exchange
+// suffix so GLD.TO etc. still match.
+function etfSector(ticker, stored) {
+  var t = String(ticker || '').toUpperCase().replace(/\.[A-Z]{1,3}$/, '');
+  return ETF_THEME[t] || stored;
 }
 
 function normalizeSector(sector, lang) {
@@ -343,6 +372,23 @@ function normalizeSector(sector, lang) {
     'криптовалюта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
     'крипта': { ua: 'Криптовалюта', en: 'Cryptocurrency' },
     'digital assets': { ua: 'Цифрові активи', en: 'Digital Assets' },
+    // Full canonical enum — the worker constrains the AI to THIS set, so every
+    // sector is known and translatable (no free-text that shows untranslated).
+    'software': { ua: 'Програмне забезпечення', en: 'Software' },
+    'cybersecurity': { ua: 'Кібербезпека', en: 'Cybersecurity' },
+    'telecom': { ua: 'Телекомунікації', en: 'Telecom' },
+    'telecommunications': { ua: 'Телекомунікації', en: 'Telecom' },
+    'banking': { ua: 'Банківська справа', en: 'Banking' },
+    'banks': { ua: 'Банківська справа', en: 'Banking' },
+    'insurance': { ua: 'Страхування', en: 'Insurance' },
+    'oil & gas': { ua: 'Нафта і газ', en: 'Oil & Gas' },
+    'oil and gas': { ua: 'Нафта і газ', en: 'Oil & Gas' },
+    'aerospace & defense': { ua: 'Аерокосмос і оборона', en: 'Aerospace & Defense' },
+    'aerospace and defense': { ua: 'Аерокосмос і оборона', en: 'Aerospace & Defense' },
+    'transportation': { ua: 'Транспорт', en: 'Transportation' },
+    'international': { ua: 'Міжнародні', en: 'International' },
+    'consumer staples': { ua: 'Товари першої потреби', en: 'Consumer Staples' },
+    'index fund': { ua: 'Індексний фонд', en: 'Index Fund' },
     // ETF / index / commodity fund THEMES — the worker tells the AI to label funds
     // by their theme (Gold, Broad Market…) instead of a company sector. These must
     // translate too (Pylyp: GLD showed "Gold"/"Financial Services", untranslated).
@@ -493,7 +539,7 @@ function renderResult(ticker, d, cachedAt) {
   document.getElementById('result').style.display = 'block';
   renderFreshness(cachedAt || Date.now());
   document.getElementById('r-ticker').textContent = ticker;
-  document.getElementById('r-sector').textContent = normalizeSector(d.sector, lang);
+  document.getElementById('r-sector').textContent = normalizeSector(etfSector(ticker, d.sector), lang);
   document.getElementById('r-risk').textContent = d.risk;
   document.getElementById('r-trend').textContent = d.trend;
   document.getElementById('r-for').textContent = d.forWho;

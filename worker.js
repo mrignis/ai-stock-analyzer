@@ -928,6 +928,11 @@ ${news || 'No recent news available'}`.trim();
   const isFund = /^(SPY|SPX|QQQ|QQQM|VOO|VTI|IVV|IWM|DIA|GLD|IAU|SLV|USO|VGT|VUG|VTV|VIG|VYM|VEA|VWO|VXUS|SCHD|SCHB|ARKK|ARKG|EEM|EFA|TLT|IEF|SHY|HYG|LQD|BND|AGG|SMH|SOXX|XBI|XL[BCEFIKPRUV])$/i.test(t)
     || /\b(ETF|ETN|index fund)\b/i.test(companyName);
   const systemPrompt = `You are a professional stock analyst. Reply ONLY with valid JSON — no markdown, no explanation, no extra text.`;
+  // Constrain "sector" to a FIXED enum so it's never free-text the client can't
+  // translate. The client's normalizeSector covers exactly this set.
+  const SECTOR_LIST = 'Technology, Software, Semiconductors, Artificial Intelligence, Cloud Computing, Cybersecurity, Communication Services, Media, Telecom, Financial Services, Banking, Insurance, Healthcare, Biotechnology, Pharmaceuticals, Consumer Goods, Consumer Discretionary, Consumer Staples, Retail, Food & Beverage, Automotive, Energy, Oil & Gas, Utilities, Industrials, Aerospace & Defense, Materials, Mining, Real Estate, Transportation, Cryptocurrency';
+  const FUND_SECTOR_LIST = 'S&P 500, Nasdaq 100, Dow Jones, Broad Market, Gold, Silver, Oil, Commodities, Bonds, Emerging Markets, International, Dividend, Index Fund, ETF, Real Estate, Technology, Semiconductors, Energy, Healthcare';
+  const sectorList = isFund ? FUND_SECTOR_LIST : SECTOR_LIST;
   const userPrompt = `Analyze this stock based on real data:
 
 ${context}
@@ -936,7 +941,7 @@ ${thinData ? 'NOTE: No financial profile was available — only the company name
 ${isFund ? 'IMPORTANT: This ticker is an ETF / index / commodity fund, NOT a single company. Do NOT give it a single-company sector like "Financial Services" or "Technology". For "sector" use "Index Fund", "ETF", or the fund theme (e.g. "S&P 500", "Gold", "Broad Market"). Analyze it as a DIVERSIFIED BASKET tracking its index/asset — describe what it holds and its risk profile, never a single business. Keep "trend"/"verdict" measured and factual (a broad-market fund is not one volatile stock; avoid sensational calls like "bubble"). Base any view on the actual index, not invention.' : ''}
 ${langInstruction(lang)}
 Return ONLY this JSON structure (all text values in the language above EXCEPT "sector", which must ALWAYS be a concise English label so the client can translate it to any UI language; keep color and dir as the exact English keywords listed):
-{"sector":"one concise sector name in ENGLISH only (e.g. Technology, Semiconductors, Financial, Energy, Healthcare, Mining, Consumer Goods, Real Estate, Cryptocurrency, Index Fund)","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"${TREND_HINT[lang] || TREND_HINT.en}","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
+{"sector":"pick EXACTLY ONE English label from this list, nothing else: ${sectorList}","risk":"${RISK_HINT[lang] || RISK_HINT.en}","trend":"${TREND_HINT[lang] || TREND_HINT.en}","forWho":"...","what":"2-3 sentences about what the company does","risks":"2-3 sentences about key risks","forecast":"2-3 sentences with price target","conclusion":"2-3 sentences summary","verdict":"${VERDICT_HINT[lang] || VERDICT_HINT.en}","color":"green or yellow or red or blue","dir":"up or down or volatile or flat or up_strong"}`;
 
   let text;
   try {
@@ -958,6 +963,24 @@ Return ONLY this JSON structure (all text values in the language above EXCEPT "s
   } catch (e) {
     return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
   }
+  // Deterministic sector for known ETFs — the AI is inconsistent for these (labels
+  // GLD "Index Fund"/"Financial Services" instead of its actual theme). The theme
+  // is a fact, not a judgement, so override the AI (Pylyp: GLD must be Gold).
+  const ETF_THEME = {
+    SPY:'S&P 500', SPX:'S&P 500', VOO:'S&P 500', IVV:'S&P 500', SPLG:'S&P 500',
+    QQQ:'Nasdaq 100', QQQM:'Nasdaq 100', DIA:'Dow Jones',
+    VTI:'Broad Market', ITOT:'Broad Market', SCHB:'Broad Market', IWM:'Broad Market', VUG:'Broad Market', VTV:'Broad Market',
+    GLD:'Gold', IAU:'Gold', SGOL:'Gold', GLDM:'Gold', SLV:'Silver', SIVR:'Silver',
+    USO:'Oil', BNO:'Oil', UNG:'Commodities',
+    TLT:'Bonds', IEF:'Bonds', SHY:'Bonds', BND:'Bonds', AGG:'Bonds', LQD:'Bonds', HYG:'Bonds',
+    VEA:'International', VXUS:'International', EFA:'International', VWO:'Emerging Markets', EEM:'Emerging Markets',
+    VYM:'Dividend', VIG:'Dividend', SCHD:'Dividend',
+    VGT:'Technology', XLK:'Technology', SMH:'Semiconductors', SOXX:'Semiconductors',
+    ARKK:'Technology', ARKG:'Biotechnology', XBI:'Biotechnology',
+    XLB:'Materials', XLC:'Communication Services', XLE:'Energy', XLF:'Financial Services',
+    XLI:'Industrials', XLP:'Consumer Staples', XLU:'Utilities', XLV:'Healthcare', XLRE:'Real Estate', XLY:'Consumer Discretionary',
+  };
+  if (ETF_THEME[t]) analysis.sector = ETF_THEME[t];
   const resp = json({
     ...analysis,
     // Finnhub quotes (US listings) are USD; a foreign fallback quote carries its own

@@ -187,7 +187,7 @@ function renderWatchlist() {
       '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
         'style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:0 5px;color:' + (w.home ? 'var(--yellow)' : 'var(--muted)') + '">' + star + '</button>' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
-      '<div class="watch-info"><div class="watch-sector" id="ws-' + w.ticker + '">' + escHtml(normalizeSector(w.sector || '', lang)) + '</div></div>' +
+      '<div class="watch-info"><div class="watch-sector" id="ws-' + w.ticker + '">' + escHtml(normalizeSector(etfSector(w.ticker, w.sector || ''), lang)) + '</div></div>' +
       '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
       '<span class="watch-pct" id="wpc-' + w.ticker + '"></span>' +
       '<span class="verdict-pill ' + pill + '" id="wv-' + w.ticker + '">' + escHtml(normalizeVerdict(w.verdict || '', lang)) + '</span>' +
@@ -269,7 +269,7 @@ function refreshWatchlistMeta() {
 function syncWatchlistMeta(ticker, data, paint) {
   var wl = watchlist.find(function(w) { return w.ticker === ticker; });
   if (!wl || !data) return;
-  var ns = normalizeSector(data.sector || '', 'en');
+  var ns = normalizeSector(etfSector(ticker, data.sector || ''), 'en');
   var nv = normalizeVerdict(data.verdict || '', 'en');
   var changed = wl.sector !== ns || wl.verdict !== nv || (data.color && wl.color !== data.color);
   wl.sector = ns; wl.verdict = nv; if (data.color) wl.color = data.color;
