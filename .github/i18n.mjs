@@ -38,7 +38,9 @@ function render(lang) {
     { ticker: 'SPY', sector: 'Financial Services', verdict: 'Тримати', color: 'yellow' },
     { ticker: 'CNQ', sector: 'Mining', verdict: 'Hold', color: 'yellow' },
     { ticker: 'ETH', sector: 'Cryptocurrency', verdict: 'Купувати', color: 'green' },
-    { ticker: 'GLD', sector: 'Exploitation minière', verdict: 'Conserver', color: 'yellow' },
+    { ticker: 'GLD', sector: 'Gold', verdict: 'Conserver', color: 'yellow' },       // ETF theme — must localize (Золото/Or)
+    { ticker: 'SPY2', sector: 'Broad Market', verdict: 'Hold', color: 'yellow' },   // fund theme — Широкий ринок/Marché large
+    { ticker: 'MINE', sector: 'Exploitation minière', verdict: 'Buy', color: 'green' }, // stored FR
   ];
   ctx.historyList = [{ ticker: 'NVDA', color: 'green', verdict: 'Купувати', t: Date.now() }];
   ctx.renderWatchlist();
