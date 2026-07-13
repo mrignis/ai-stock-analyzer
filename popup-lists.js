@@ -187,10 +187,10 @@ function renderWatchlist() {
       '<button class="watch-star" data-ticker="' + w.ticker + '" title="' + starTitle + '" ' +
         'style="background:none;border:none;cursor:pointer;font-size:17px;line-height:1;padding:0 5px;color:' + (w.home ? 'var(--yellow)' : 'var(--muted)') + '">' + star + '</button>' +
       '<span class="watch-ticker">' + w.ticker + '</span>' +
-      '<div class="watch-info"><div class="watch-sector">' + escHtml(normalizeSector(w.sector || '', lang)) + '</div></div>' +
+      '<div class="watch-info"><div class="watch-sector" id="ws-' + w.ticker + '">' + escHtml(normalizeSector(w.sector || '', lang)) + '</div></div>' +
       '<span class="watch-price" id="wp-' + w.ticker + '" style="color:var(--dim)">—</span>' +
       '<span class="watch-pct" id="wpc-' + w.ticker + '"></span>' +
-      '<span class="verdict-pill ' + pill + '">' + escHtml(normalizeVerdict(w.verdict || '', lang)) + '</span>' +
+      '<span class="verdict-pill ' + pill + '" id="wv-' + w.ticker + '">' + escHtml(normalizeVerdict(w.verdict || '', lang)) + '</span>' +
       '<button class="watch-remove" data-ticker="' + w.ticker + '">✕</button>' +
     '</div>';
   }
@@ -232,6 +232,55 @@ function renderWatchlist() {
       applyPriceToElements(d, 'wp-' + w.ticker, 'wpc-' + w.ticker);
     });
   });
+
+  refreshWatchlistMeta(); // self-heal stale sectors/verdicts in the background
+}
+
+// A watchlist entry stores its sector/verdict at add-time and used to keep them
+// FOREVER — so an old analysis that mislabeled GLD as "Financial Services" (before
+// ETF detection) never corrected itself (Pylyp). Re-fetch a fresh /analyze in the
+// background and update the stored value + the cell in place. Throttled to once
+// per 6h per ticker (metaAt) and paced ~1 call / 3.5s so the shared free AI key
+// and the worker's 20/min limit are respected; the call is edge-cached 30 min.
+var WL_META_TTL = 6 * 60 * 60 * 1000;
+function refreshWatchlistMeta() {
+  var queue = watchlist
+    .filter(function(w) { return !w.metaAt || Date.now() - w.metaAt > WL_META_TTL; })
+    .map(function(w) { return w.ticker; });
+  (function next() {
+    if (!queue.length) return;
+    var t = queue.shift();
+    if (!watchlist.some(function(x) { return x.ticker === t; })) { next(); return; } // removed meanwhile
+    var after = function() { setTimeout(next, 3500); };
+    fetch(WORKER_URL + '/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker: t, lang: lang }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d && !d.error && d.sector) syncWatchlistMeta(t, d, true); })
+      .then(after, after);
+  })();
+}
+
+// Update a watchlist entry's stored sector/verdict/color from a fresh analysis and
+// (if `paint`) reflect it in the rendered cell without a full re-render. Called by
+// the background refresh AND by finish() so analyzing any ticker heals its tile
+// instantly. Sector/verdict stored canonical (EN) so they re-localize on switch.
+function syncWatchlistMeta(ticker, data, paint) {
+  var wl = watchlist.find(function(w) { return w.ticker === ticker; });
+  if (!wl || !data) return;
+  var ns = normalizeSector(data.sector || '', 'en');
+  var nv = normalizeVerdict(data.verdict || '', 'en');
+  var changed = wl.sector !== ns || wl.verdict !== nv || (data.color && wl.color !== data.color);
+  wl.sector = ns; wl.verdict = nv; if (data.color) wl.color = data.color;
+  wl.metaAt = Date.now();
+  save({ watchlist: watchlist });
+  if (!paint || !changed) return;
+  var secEl = document.getElementById('ws-' + ticker);
+  if (secEl) secEl.textContent = normalizeSector(ns, lang);
+  var vEl = document.getElementById('wv-' + ticker);
+  if (vEl) { vEl.textContent = normalizeVerdict(nv, lang); vEl.className = 'verdict-pill ' + pillClass(wl.color); }
+  renderHomeWatchlist(); // home tiles reflect the corrected verdict too
 }
 
 // ── History ───────────────────────────────────────────────────────────────────

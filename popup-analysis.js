@@ -409,6 +409,7 @@ function finish(ticker, data, cachedAt) {
   renderResult(ticker, data, cachedAt);
   fetchRealChart(ticker, data.color);
   fetchSocialBuzz(ticker);
+  syncWatchlistMeta(ticker, data, true); // heal this ticker's watchlist tile (sector/verdict) if listed
 }
 
 // Reddit "buzz" signal (worker /social → ApeWisdom). A bonus social-proof row;
