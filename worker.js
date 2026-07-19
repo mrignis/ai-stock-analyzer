@@ -756,6 +756,39 @@ async function handleSocial(request) {
   });
 }
 
+// Pull the JSON object out of an AI reply, defensively. A greedy /\{[\s\S]*\}/
+// swallows any trailing prose, and the model sometimes emits literal newlines
+// inside strings (invalid JSON) or gets cut off at the token cap mid-value. This
+// scans for a BALANCED object (ignoring braces inside strings), strips control
+// characters, and as a last resort repairs a truncated tail by closing the open
+// string/braces. Returns the parsed object, or null if it's unsalvageable.
+function extractAIJson(text) {
+  const cleaned = String(text || '').replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  const start = cleaned.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false, end = -1;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\') { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { end = i; break; } }
+  }
+  let body = (end > 0 ? cleaned.slice(start, end + 1) : cleaned.slice(start))
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/\r?\n/g, ' ');
+  try { return JSON.parse(body); } catch (_) {}
+  if (end < 0) { // truncated at the token cap — close what's dangling and retry
+    if (inStr) body += '"';
+    body = body.replace(/[,\s]+$/, '');
+    for (let d = depth; d > 0; d--) body += '}';
+    try { return JSON.parse(body); } catch (_) {}
+  }
+  return null;
+}
+
 // ── /analyze ──────────────────────────────────────────────────────────────────
 async function handleAnalyze(request, env, ctx) {
   let body;
@@ -945,24 +978,33 @@ Return ONLY this JSON structure (all text values in the language above EXCEPT "s
 
   let text;
   try {
+    // 2000, not 1024: the JSON carries four 2-3 sentence fields, and UA/FR spend
+    // more tokens per word — at 1024 the answer got cut off mid-string, producing
+    // the intermittent "AI JSON parse error" (Pylyp).
     text = await callAI(env, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
-    ], 0.3, 1024);
+    ], 0.3, 2000);
   } catch (e) {
     return aiErrorResponse(e, ua);
   }
 
-  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) return json({ error: 'AI parse error', raw: text.slice(0, 300) }, 500);
-
-  let analysis;
-  try {
-    analysis = JSON.parse(match[0]);
-  } catch (e) {
-    return json({ error: 'AI JSON parse error', raw: text.slice(0, 300) }, 500);
+  let analysis = extractAIJson(text);
+  if (!analysis) {
+    // Transient malformed/truncated output — one retry almost always succeeds
+    // (Pylyp saw "AI JSON parse error" intermittently). Costs an extra call only
+    // on the rare failure path, never on the happy path.
+    try {
+      text = await callAI(env, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ], 0.2, 2000);
+    } catch (e) {
+      return aiErrorResponse(e, ua);
+    }
+    analysis = extractAIJson(text);
   }
+  if (!analysis) return json({ error: 'AI parse error', raw: String(text).slice(0, 300) }, 500);
   // Deterministic sector for known ETFs — the AI is inconsistent for these (labels
   // GLD "Index Fund"/"Financial Services" instead of its actual theme). The theme
   // is a fact, not a judgement, so override the AI (Pylyp: GLD must be Gold).
