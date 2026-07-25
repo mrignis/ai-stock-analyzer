@@ -79,6 +79,36 @@ async function main() {
     /ticker=TSLA/.test(url) ? ok('click opens analysis tab (ticker=TSLA)') : bad('click opens tab', 'url ' + url);
   } catch (e) { bad('click opens analysis tab', e.message); }
 
+  // 6) Social injector (Reddit/X): plain-text cashtags highlight + the card shows
+  // the Reddit "buzz" line; an X-style LINKED cashtag ($NVDA in an <a>) still shows
+  // the card on hover (it's skipped for rewriting but resolved from the link).
+  try {
+    const rpage = await context.newPage();
+    const RFIX = `<!doctype html><html><head><meta charset="utf-8"><title>r</title></head>
+<body><div class="post"><p id="rp">Thread on $TSLA — everyone's loading up. Linked: <a href="/search?q=$NVDA" id="xlink">$NVDA</a></p></div></body></html>`;
+    await rpage.route('**/reddit.com/**', r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: RFIX }));
+    await rpage.goto('https://www.reddit.com/r/stocks/comments/test', { waitUntil: 'load' });
+    await rpage.waitForSelector('.ais-tk-hl', { timeout: 8000 }).catch(() => {});
+    const rhl = await rpage.$$eval('.ais-tk-hl', els => els.map(e => e.getAttribute('data-ais')));
+    rhl.includes('TSLA') ? ok('reddit: plain cashtag highlighted') : bad('reddit highlight', JSON.stringify(rhl));
+
+    await rpage.hover('.ais-tk-hl[data-ais="TSLA"]');
+    const buzzed = await rpage.waitForFunction(() => {
+      const c = document.getElementById('ais-tk-card');
+      return c && c.style.display !== 'none' && /🔥|💬|buzz|хайп|activité/i.test(c.textContent);
+    }, { timeout: 15000 }).then(() => true).catch(() => false);
+    buzzed ? ok('reddit: card shows buzz line') : bad('reddit buzz line');
+
+    await rpage.mouse.move(0, 0);
+    await rpage.hover('#xlink'); // X-style linked cashtag
+    const linkCard = await rpage.waitForFunction(() => {
+      const c = document.getElementById('ais-tk-card');
+      return c && c.style.display !== 'none' && /NVDA/.test(c.textContent);
+    }, { timeout: 10000 }).then(() => true).catch(() => false);
+    linkCard ? ok('linked cashtag ($NVDA in <a>) shows card on hover') : bad('linked cashtag hover');
+    await rpage.close();
+  } catch (e) { bad('social injector', e.message); }
+
   await context.close();
   const failed = results.filter(r => r[0] === 'FAIL').length;
   console.log(`\n  ${results.length - failed} passed, ${failed} failed`);

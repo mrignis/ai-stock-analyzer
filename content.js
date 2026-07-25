@@ -12,6 +12,10 @@
   var MAX_HL = 250;      // safety cap per page
   var count = 0;
   var WORKER = 'https://stock-ai-analyzer.chelb-dev.workers.dev'; // in host_permissions
+  // On Reddit/X the same highlight+card runs, but the card also shows the Reddit
+  // "buzz" (how hyped the ticker is) — the reason a user is on the thread. Kept to
+  // these hosts so news pages stay a plain price card.
+  var SOCIAL = /(^|\.)(reddit\.com|x\.com|twitter\.com)$/i.test(location.hostname);
 
   // Cashtags ($TSLA) and parenthesised tickers (AAPL). Common acronyms are NOT
   // tickers — exclude them so we don't underline "(USA)" or "(CEO)".
@@ -140,23 +144,60 @@
     c.style.top = (r.bottom + 6) + 'px';
     c.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 256)) + 'px';
     var hit = priceCache[t];
-    if (hit && Date.now() - hit.at < 60000) { paint(c, t, hit.d); return; }
+    if (hit && Date.now() - hit.at < 60000) { paint(c, t, hit.d); if (SOCIAL) showBuzz(t); return; }
     c.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
     fetch(WORKER + '/price?ticker=' + encodeURIComponent(t))
       .then(function (r) { return r.json(); })
-      .then(function (d) { priceCache[t] = { at: Date.now(), d: d }; if (card && card.style.display !== 'none') paint(card, t, d); })
+      .then(function (d) { priceCache[t] = { at: Date.now(), d: d }; if (card && card.style.display !== 'none') { paint(card, t, d); if (SOCIAL) showBuzz(t); } })
       .catch(function () {});
   }
+
+  // Reddit "buzz" line, appended below the price on social sites. Cheap /social GET
+  // (cached 5 min per ticker, no AI). paint() rewrites the card body, so this is
+  // called AFTER paint and appends its own node; all values coerced to Number.
+  var buzzCache = {};
+  function paintBuzz(t, d) {
+    if (!card || card.style.display === 'none') return;
+    var el = card.querySelector('#ais-buzz');
+    if (!el) { el = document.createElement('div'); el.id = 'ais-buzz'; el.style.cssText = 'margin-top:4px;font-size:11px;color:#fb923c;font-family:monospace'; card.appendChild(el); }
+    if (d && d.found) {
+      el.textContent = '🔥 ' + L2('Reddit-хайп', 'Reddit buzz', 'Buzz Reddit') + ' #' + Number(d.rank) + ' · ' + Number(d.mentions) + ' ' + L2('згадок', 'mentions', 'mentions');
+    } else {
+      el.textContent = '💬 ' + L2('низька активність', 'low buzz', 'faible activité');
+    }
+  }
+  function showBuzz(t) {
+    var hit = buzzCache[t];
+    if (hit && Date.now() - hit.at < 300000) { paintBuzz(t, hit.d); return; }
+    fetch(WORKER + '/social?ticker=' + encodeURIComponent(t))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { buzzCache[t] = { at: Date.now(), d: d }; paintBuzz(t, d); })
+      .catch(function () {});
+  }
+  // On X (and anywhere) cashtags are rendered as <a href="/search?q=$TSLA">$TSLA</a>,
+  // which the highlighter skips (SKIP.A) so it never rewrites a real link. On social
+  // hosts, resolve the hovered cashtag LINK to its ticker and show the card on it —
+  // without touching the anchor or its native click.
+  function cashtagFromLink(el) {
+    if (!SOCIAL || !el || !el.closest) return null;
+    var a = el.closest('a'); if (!a) return null;
+    var m = /^\$([A-Za-z]{1,5})$/.exec((a.textContent || '').trim());
+    if (!m) return null;
+    var t = m[1].toUpperCase();
+    return (t.length >= 2 && !STOP[t]) ? t : null;
+  }
   document.addEventListener('mouseover', function (e) {
-    var el = e.target;
-    if (el && el.classList && el.classList.contains(HL_CLASS)) {
+    var el = e.target, t = null, anchor = el;
+    if (el && el.classList && el.classList.contains(HL_CLASS)) { t = el.getAttribute('data-ais'); }
+    else { t = cashtagFromLink(el); if (t && el.closest) anchor = el.closest('a'); }
+    if (t) {
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      var t = el.getAttribute('data-ais'); if (t) showCard(el, t);
+      showCard(anchor, t);
     }
   }, true);
   document.addEventListener('mouseout', function (e) {
     var el = e.target;
-    if (el && el.classList && el.classList.contains(HL_CLASS)) {
+    if ((el && el.classList && el.classList.contains(HL_CLASS)) || cashtagFromLink(el)) {
       hideTimer = setTimeout(function () { if (card) card.style.display = 'none'; }, 150);
     }
   }, true);

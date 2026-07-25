@@ -24,8 +24,8 @@ Not shipped in the extension (build-zip.ps1 packs an explicit runtime allowlist)
 **Host permission — `https://stock-ai-analyzer.chelb-dev.workers.dev/*`**
 > The extension's own backend (a Cloudflare Worker) and the only external host it contacts — to fetch live prices, charts, news, and the AI analysis. Only the ticker the user chooses to analyze is sent; no browsing data.
 
-**Content scripts (matches: finance.yahoo.com, google.com/finance, marketwatch.com, cnbc.com, reuters.com, bloomberg.com, seekingalpha.com)**
-> Highlights stock tickers mentioned in articles on these financial-news sites so the user can click one for an instant analysis. Reads only the visible article text to find tickers; does not collect or transmit page content or browsing history.
+**Content scripts (matches: finance.yahoo.com, google.com/finance, marketwatch.com, cnbc.com, reuters.com, bloomberg.com, seekingalpha.com, reddit.com, x.com, twitter.com)**
+> Highlights stock tickers ($TSLA, cashtags) mentioned in articles and social posts on these financial-news and investing-community sites so the user can hover for a live price (plus, on Reddit/X, how the ticker is trending) and click one for an instant AI analysis. Reads only the visible text to find tickers; does not collect, store, or transmit page content, posts, or browsing history — only the ticker symbol the user chooses to look up is sent to our backend.
 
 **Remote code**
 > No. The extension executes no remotely-hosted code. All logic is bundled; the backend returns only data (JSON), never executable code.
