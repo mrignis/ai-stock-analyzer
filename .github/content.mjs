@@ -86,7 +86,9 @@ async function main() {
     const rpage = await context.newPage();
     const RFIX = `<!doctype html><html><head><meta charset="utf-8"><title>r</title></head>
 <body><div class="post"><p id="rp">Thread on $TSLA — everyone's loading up. Linked: <a href="/search?q=$NVDA" id="xlink">$NVDA</a></p></div></body></html>`;
-    await rpage.route('**/reddit.com/**', r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: RFIX }));
+    // NOTE: `**reddit.com/**` (no leading slash) so it matches the www. subdomain —
+    // `**/reddit.com/**` would need a slash before the host and never matched.
+    await rpage.route('**reddit.com/**', r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: RFIX }));
     await rpage.goto('https://www.reddit.com/r/stocks/comments/test', { waitUntil: 'load' });
     await rpage.waitForSelector('.ais-tk-hl', { timeout: 8000 }).catch(() => {});
     const rhl = await rpage.$$eval('.ais-tk-hl', els => els.map(e => e.getAttribute('data-ais')));
