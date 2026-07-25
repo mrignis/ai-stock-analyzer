@@ -19,7 +19,7 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><title>Fixture
 
 const results = [];
 const ok = (n) => { results.push(['PASS', n]); console.log('  PASS ' + n); };
-const bad = (n, d = '') => { results.push(['FAIL', n]); console.log('  FAIL ' + n + (d ? ' — ' + d : '')); console.log('::error::content: ' + n + (d ? ' — ' + String(d).replace(/\s+/g, ' ').slice(0, 200) : '')); };
+const bad = (n, d = '') => { results.push(['FAIL', n]); console.log('  FAIL ' + n + (d ? ' — ' + d : '')); };
 
 async function main() {
   const context = await chromium.launchPersistentContext('', {
