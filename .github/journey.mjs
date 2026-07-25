@@ -14,7 +14,7 @@ mkdirSync(SHOTS, { recursive: true });
 
 const results = [];
 const pass = (n, d = '') => { results.push(['PASS', n]); console.log(`  PASS ${n}${d ? ' — ' + d : ''}`); };
-const fail = (n, d = '') => { results.push(['FAIL', n]); console.log(`  FAIL ${n}${d ? ' — ' + d : ''}`); console.log(`::error::journey: ${n}${d ? ' — ' + String(d).replace(/\s+/g, ' ').slice(0, 200) : ''}`); };
+const fail = (n, d = '') => { results.push(['FAIL', n]); console.log(`  FAIL ${n}${d ? ' — ' + d : ''}`); };
 const errs = [];
 
 // Analyze `input`, wait until the resolved header (#r-ticker) matches `expect`

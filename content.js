@@ -109,10 +109,17 @@
     card.style.cssText = 'position:fixed;z-index:2147483647;background:#0f1420;color:#e8eaed;' +
       'border:1px solid #2a3345;border-radius:8px;padding:8px 10px;font:12px/1.35 system-ui,Arial,sans-serif;' +
       'box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:none;max-width:250px;display:none';
+    // Two stable rows: price (#ais-main) and the Reddit buzz (#ais-buzz). They're
+    // filled by separate async fetches (/price, /social), so keeping them in their
+    // OWN nodes means one repaint never wipes the other (the buzz line was racing
+    // the price paint and vanishing when /social won).
+    card.innerHTML = '<div id="ais-main"></div><div id="ais-buzz"></div>';
     (document.body || document.documentElement).appendChild(card);
     return card;
   }
+  function cardMain() { return (card && card.querySelector('#ais-main')) || null; }
   function paint(c, t, d) {
+    var main = cardMain(); if (!main) return;
     // Sanitize the ticker before it enters innerHTML — a hostile page on a matched
     // finance domain could plant a fake .ais-tk-hl span with a malicious data-ais.
     var safeT = String(t == null ? '' : t).replace(/[^A-Z0-9.]/gi, '').slice(0, 10);
@@ -120,7 +127,7 @@
     // Coerce every injected value to a Number so nothing but digits can enter the
     // innerHTML (defensive — the data is from our own worker, but keep it airtight).
     var price = d ? Number(d.c) : NaN;
-    if (!isFinite(price) || price <= 0) { c.innerHTML = head + ' · ' + L2('нема даних', 'no data', 'aucune donnée'); return; }
+    if (!isFinite(price) || price <= 0) { main.innerHTML = head + ' · ' + L2('нема даних', 'no data', 'aucune donnée'); return; }
     var prev = Number(d.pc);
     var pc = d.dp != null ? Number(d.dp) : (prev > 0 ? ((price - prev) / prev * 100) : 0);
     if (!isFinite(pc)) pc = 0;
@@ -132,7 +139,7 @@
     var cur = String(d.cur || 'USD').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
     var CSYM = { USD: '$', CAD: 'CA$', GBP: '£', AUD: 'A$', EUR: '€', INR: '₹', JPY: '¥' };
     var pfx = CSYM[cur] || (cur ? cur + ' ' : '$');
-    c.innerHTML = head + ' <span style="font-family:monospace">' + pfx + price + '</span> ' +
+    main.innerHTML = head + ' <span style="font-family:monospace">' + pfx + price + '</span> ' +
       '<span style="color:' + col + ';font-family:monospace">' + ar + ' ' + Math.abs(pc).toFixed(2) + '%</span>' +
       '<div style="margin-top:4px;color:#8b93a7;font-size:11px">' +
       L2('Клік — повний аналіз', 'Click for full analysis', "Cliquez pour l'analyse") + '</div>';
@@ -143,9 +150,11 @@
     c.style.display = 'block';
     c.style.top = (r.bottom + 6) + 'px';
     c.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 256)) + 'px';
+    var main = cardMain(); if (main) main.innerHTML = '';
+    var bz = card.querySelector('#ais-buzz'); if (bz) bz.textContent = ''; // clear stale row on re-show
     var hit = priceCache[t];
     if (hit && Date.now() - hit.at < 60000) { paint(c, t, hit.d); if (SOCIAL) showBuzz(t); return; }
-    c.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
+    if (main) main.innerHTML = '<b style="color:#4ade80;font-family:monospace">' + t + '</b> · ' + L2('ціна…', 'loading…', 'chargement…');
     fetch(WORKER + '/price?ticker=' + encodeURIComponent(t))
       .then(function (r) { return r.json(); })
       .then(function (d) { priceCache[t] = { at: Date.now(), d: d }; if (card && card.style.display !== 'none') { paint(card, t, d); if (SOCIAL) showBuzz(t); } })
@@ -158,8 +167,8 @@
   var buzzCache = {};
   function paintBuzz(t, d) {
     if (!card || card.style.display === 'none') return;
-    var el = card.querySelector('#ais-buzz');
-    if (!el) { el = document.createElement('div'); el.id = 'ais-buzz'; el.style.cssText = 'margin-top:4px;font-size:11px;color:#fb923c;font-family:monospace'; card.appendChild(el); }
+    var el = card.querySelector('#ais-buzz'); if (!el) return;
+    el.style.cssText = 'margin-top:4px;font-size:11px;color:#fb923c;font-family:monospace';
     if (d && d.found) {
       el.textContent = '🔥 ' + L2('Reddit-хайп', 'Reddit buzz', 'Buzz Reddit') + ' #' + Number(d.rank) + ' · ' + Number(d.mentions) + ' ' + L2('згадок', 'mentions', 'mentions');
     } else {
