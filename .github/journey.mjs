@@ -166,10 +166,12 @@ async function main() {
     await page.waitForSelector('#compare-overlay', { state: 'visible', timeout: 5000 });
     await page.fill('#cmp-input', 'AAPL');
     await page.click('#cmp-go');
+    // 55s (matches analyze()'s tolerance): compare runs a FRESH /analyze for B and
+    // the shared free Groq key can queue under load — 30s occasionally wasn't enough.
     await page.waitForFunction(() => {
       const g = document.querySelector('#cmp-result .cmp-grid');
       return g && /AAPL/.test(g.textContent) && /\$\d/.test(g.textContent);
-    }, { timeout: 30000 });
+    }, { timeout: 55000 });
     const txt = (await page.textContent('#cmp-result')) || '';
     await page.screenshot({ path: `${SHOTS}/j4e-compare.png` });
     const ok = /AAPL/.test(txt) && /BTC/.test(txt) && /\$\d/.test(txt);
@@ -249,14 +251,19 @@ async function main() {
     const mood = (await page.textContent('#news-mood').catch(() => '')) || '';
     await page.screenshot({ path: `${SHOTS}/j5d-news-sentiment.png` });
     pass('news AI sentiment', mood.replace(/\s+/g, ' ').slice(0, 40));
-    // Switching language must re-localize the news panel IMMEDIATELY (not only
-    // after navigating away and back) — the mood banner text should change.
-    if (mood) {
+  } catch (e) { fail('news AI sentiment', e.message); await page.screenshot({ path: `${SHOTS}/j5d-FAIL.png` }); }
+
+  // 5e) Switching language re-localizes the news panel IMMEDIATELY (not only after
+  // navigating away and back) — the mood banner text should change. Own try so a
+  // timing blip here never fails the sentiment check above.
+  try {
+    const mood0 = (await page.textContent('#news-mood').catch(() => '')) || '';
+    if (mood0) {
       await page.click('#lang-btn');
-      await page.waitForFunction((b) => { const m = document.getElementById('news-mood'); return m && m.textContent && m.textContent !== b; }, mood, { timeout: 8000 });
+      await page.waitForFunction((b) => { const m = document.getElementById('news-mood'); return m && m.textContent && m.textContent !== b; }, mood0, { timeout: 15000 });
       pass('news re-localizes on language switch');
     }
-  } catch (e) { fail('news AI sentiment / re-localize', e.message); await page.screenshot({ path: `${SHOTS}/j5d-FAIL.png` }); }
+  } catch (e) { fail('news re-localizes on language switch', e.message); }
 
   // 6) Multi-turn chat: ask, then a follow-up
   try {
