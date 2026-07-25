@@ -103,6 +103,9 @@ document.addEventListener('DOMContentLoaded', function() {
       // must re-localize too — otherwise it stays in the old language until you
       // navigate away and back (Pylyp: FR switch left "News mood"/"Read article").
       if (currentNewsTicker && document.getElementById('panel-news').classList.contains('active')) fetchNews(currentNewsTicker);
+      // Compare overlay, if open, re-runs so its rows (Price/Sector/Risk/Trend/
+      // Analysts labels + values) switch language too.
+      if (document.getElementById('compare-overlay').style.display !== 'none' && document.getElementById('cmp-input').value.trim()) runCompare();
       if (currentTicker) runAnalysis();
     });
 

@@ -1092,9 +1092,8 @@ async function handleNewsSentiment(request, env) {
   const user = `Stock: ${t}\nReturn exactly this JSON shape:\n{"overall":"bullish|bearish|neutral","items":[{"i":0,"s":"bull|bear|neutral"}]}\nHeadlines:\n${list}`;
   let ai = null;
   try {
-    const text = await callAI(env, [{ role: 'system', content: sys }, { role: 'user', content: user }], 0.2, 500);
-    const m = text.replace(/```json\s*/gi, '').replace(/```/g, '').match(/\{[\s\S]*\}/);
-    if (m) ai = JSON.parse(m[0]);
+    const text = await callAI(env, [{ role: 'system', content: sys }, { role: 'user', content: user }], 0.2, 700);
+    ai = extractAIJson(text); // robust parse (balanced braces, repairs truncation)
   } catch (e) { /* AI down → return news with no sentiment rather than failing */ }
 
   const smap = {};
