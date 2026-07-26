@@ -812,7 +812,9 @@ async function handleAnalyze(request, env, ctx) {
   const rawKey = ticker.toUpperCase().trim();
   const keyTicker = CRYPTO_NAMES[rawKey] || NAME_TO_TICKER[rawKey] || rawKey;
   const cacheKeyUrl = new URL(request.url);
-  cacheKeyUrl.search = '?k=' + encodeURIComponent(keyTicker + '_' + (lang === 'ua' ? 'ua' : 'en'));
+  // Key by the FULL language — collapsing fr→en here made a French analysis return
+  // the English-cached text (labels switched, body stayed English). Pylyp.
+  cacheKeyUrl.search = '?k=' + encodeURIComponent(keyTicker + '_' + (lang === 'ua' ? 'ua' : lang === 'fr' ? 'fr' : 'en'));
   const cacheKey = new Request(cacheKeyUrl.toString());
   const cacheHit = await cache.match(cacheKey);
   if (cacheHit) return cacheHit;
