@@ -68,7 +68,7 @@ function formatChange(ch) {
 function loadLivePrice(ticker, cb) {
   cacheGet('price_' + ticker, CACHE_PRICE_TTL, function(cached) {
     if (cached) { cb(cached); return; }
-    fetch(WORKER_URL + '/price?ticker=' + ticker)
+    fetch(WORKER_URL + '/price?ticker=' + encodeURIComponent(ticker))
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.c && d.c > 0) cacheSet('price_' + ticker, d);
@@ -85,7 +85,7 @@ function loadLivePriceSWR(ticker, cb) {
   chrome.storage.local.get('c_price_' + ticker, function(s) {
     var e = s['c_price_' + ticker];
     if (e && e.d) cb(e.d);
-    fetch(WORKER_URL + '/price?ticker=' + ticker)
+    fetch(WORKER_URL + '/price?ticker=' + encodeURIComponent(ticker))
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.c && d.c > 0) { cacheSet('price_' + ticker, d); cb(d); }
@@ -152,7 +152,7 @@ function loadFxRate(cb) {
   if (currency === 'USD') { fxRate = 1; if (cb) cb(); return; }
   cacheGet('fx_' + currency, CACHE_FX_TTL, function(cached) {
     if (cached) { fxRate = cached; if (cb) cb(); return; }
-    fetch(WORKER_URL + '/fx?to=' + currency)
+    fetch(WORKER_URL + '/fx?to=' + encodeURIComponent(currency))
       .then(function(r) { return r.json(); })
       .then(function(d) {
         fxRate = (d && d.rate > 0) ? d.rate : 1;
@@ -172,7 +172,7 @@ function getUsdRate(cur, cb) {
   if (_usdRates[cur] != null) { cb(_usdRates[cur]); return; }
   cacheGet('fx_' + cur, CACHE_FX_TTL, function(cached) {
     if (cached) { _usdRates[cur] = cached; cb(cached); return; }
-    fetch(WORKER_URL + '/fx?to=' + cur)
+    fetch(WORKER_URL + '/fx?to=' + encodeURIComponent(cur))
       .then(function(r) { return r.json(); })
       .then(function(d) {
         // 0 signals "rate unknown" — the caller must EXCLUDE the position, not value

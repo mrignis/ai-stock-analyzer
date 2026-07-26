@@ -31,7 +31,7 @@ function runTargetCheck() {
 }
 
 function fetchPrice(ticker, cb) {
-  fetch(WORKER_URL + '/price?ticker=' + ticker)
+  fetch(WORKER_URL + '/price?ticker=' + encodeURIComponent(ticker))
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.c || d.c === 0) { cb(null); return; }

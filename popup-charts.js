@@ -41,7 +41,7 @@ function fetchRealChart(ticker, color) {
       if (lbl) lbl.textContent = (L('Реальні дані 30д', 'Real data 30d', 'Données réelles 30j'));
       return;
     }
-    fetch(WORKER_URL + '/candle?ticker=' + ticker)
+    fetch(WORKER_URL + '/candle?ticker=' + encodeURIComponent(ticker))
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.c && d.c.length >= 2) {

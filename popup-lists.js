@@ -65,7 +65,7 @@ function renderMarketCards(data) {
     var up = data[k].pct >= 0;
     cacheGet('candle_' + ticker, CACHE_CANDLE_TTL, function(cached) {
       if (cached) { drawSpark('spark-' + k, cached, up); return; }
-      fetch(WORKER_URL + '/candle?ticker=' + ticker)
+      fetch(WORKER_URL + '/candle?ticker=' + encodeURIComponent(ticker))
         .then(function(r) { return r.json(); })
         .then(function(c) {
           if (c.c && c.c.length >= 2) {
@@ -136,7 +136,7 @@ function renderHomeWatchlist() {
         drawSpark('hwspark-' + w.ticker, cached, cached[cached.length - 1] >= cached[0]);
         return;
       }
-      fetch(WORKER_URL + '/candle?ticker=' + w.ticker)
+      fetch(WORKER_URL + '/candle?ticker=' + encodeURIComponent(w.ticker))
         .then(function(r) { return r.json(); })
         .then(function(c) {
           if (c.c && c.c.length >= 2) {
