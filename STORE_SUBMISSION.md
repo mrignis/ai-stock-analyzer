@@ -54,16 +54,18 @@ Not shipped in the extension (build-zip.ps1 packs an explicit runtime allowlist)
 > Type any ticker — TSLA, AAPL, BTC, NVDA — and get a clear, professional read in seconds: Buy / Hold / Sell verdict, key risks, price forecast, and Wall-Street analyst consensus. Complex markets, one simple answer.
 >
 > 🤖 Instant AI verdict — a full breakdown of any stock or crypto, in plain language.
+> 📰 Research as you browse — tickers on news sites, Reddit and X light up; hover for the price, click for the full analysis.
 > 📊 Analyst consensus — Wall-Street buy/hold/sell ratings, incl. foreign & TSX listings.
 > 🔥 Reddit hype meter — see how retail is trending on a ticker before you act.
 > 💬 Ask anything — a finance chat with live data: CEOs, news, "is it a buy?"
-> 📰 Research as you browse — tickers on news sites, Reddit and X light up; hover for the price, click for the full analysis.
 > ⚖ Compare — put two tickers side by side and pick the winner.
 > 💼 Portfolio & P&L — track real gains across US, foreign, TSX and crypto, in your currency.
 > 📋 Watchlist & alerts — follow your picks and get notified the moment they move.
 > 📈 Real charts & live prices — 30-day history and real-time quotes.
 >
 > 🇬🇧🇺🇦🇫🇷 English · Ukrainian · French — 💱 21 currencies — 🌙 dark & light
+>
+> 👉 Add to Chrome — no sign-up, ready in seconds.
 >
 > Not financial advice. For information only.
 
