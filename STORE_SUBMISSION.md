@@ -46,19 +46,24 @@ Not shipped in the extension (build-zip.ps1 packs an explicit runtime allowlist)
 **Name:** AI Stock Analyzer — Stocks, Crypto & Portfolio
 
 **Short description (≤132 chars):**
-> Instant AI analysis of any stock or crypto: live prices, Buy/Hold/Sell, analyst ratings, portfolio, alerts & a finance chat. Free.
+> Your instant AI analyst for stocks & crypto: Buy/Hold/Sell verdict, analyst ratings, portfolio, price alerts & a finance chat.
 
 **Detailed description:**
-> AI Stock Analyzer gives you an instant, plain-language read on any stock or cryptocurrency — no API keys, no sign-up, completely free.
+> Your instant AI analyst for stocks and crypto — built for investors who want answers, not homework.
 >
-> • AI verdict — Buy / Hold / Sell with sector, risk, trend and a short forecast.
-> • Wall-Street analyst ratings — buy/hold/sell consensus (incl. many foreign/TSX stocks).
-> • Live prices & 30-day charts — US, foreign, TSX and crypto.
-> • Finance chat — ask about any company's CEO, news or history and get a live answer.
-> • Portfolio tracker — positions with cost basis and P&L.
-> • Price alerts — desktop notifications when a stock crosses your threshold.
-> • Reads the news with you — highlights tickers in finance articles; hover for the live price, click for full analysis.
-> • 3 languages — English, Ukrainian, French.
+> Type any ticker — TSLA, AAPL, BTC, NVDA — and get a clear, professional read in seconds: Buy / Hold / Sell verdict, key risks, price forecast, and Wall-Street analyst consensus. Complex markets, one simple answer.
+>
+> 🤖 Instant AI verdict — a full breakdown of any stock or crypto, in plain language.
+> 📊 Analyst consensus — Wall-Street buy/hold/sell ratings, incl. foreign & TSX listings.
+> 🔥 Reddit hype meter — see how retail is trending on a ticker before you act.
+> 💬 Ask anything — a finance chat with live data: CEOs, news, "is it a buy?"
+> 📰 Research as you browse — tickers on news sites, Reddit and X light up; hover for the price, click for the full analysis.
+> ⚖ Compare — put two tickers side by side and pick the winner.
+> 💼 Portfolio & P&L — track real gains across US, foreign, TSX and crypto, in your currency.
+> 📋 Watchlist & alerts — follow your picks and get notified the moment they move.
+> 📈 Real charts & live prices — 30-day history and real-time quotes.
+>
+> 🇬🇧🇺🇦🇫🇷 English · Ukrainian · French — 💱 21 currencies — 🌙 dark & light
 >
 > Not financial advice. For information only.
 
