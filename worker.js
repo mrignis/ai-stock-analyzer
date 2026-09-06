@@ -22,8 +22,8 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// AI engine: Groq (OpenAI-compatible). Llama 3.3 70B is the smart primary; on
-// timeout/overload we fall back to the faster 8B-instant so the user always gets
+// AI engine: Groq (OpenAI-compatible). gpt-oss-120b is the smart primary; on
+// timeout/overload we fall back to the faster gpt-oss-20b so the user always gets
 // an answer at peak hours. (Reverted from qwen/Ollama Cloud — qwen3-coder gave
 // thinner prose + cold-start timeouts; the company web_search below still uses
 // OLLAMA_API_KEY independently of the chat/analyze engine.)
@@ -70,8 +70,8 @@ function langInstruction(lang) {
 }
 
 async function callAI(env, messages, temperature = 0.3, maxTokens = 2048) {
-  // Primary engine (Llama 3.3 70B, 20s) → on timeout/overload retry with the
-  // fast fallback (8B-instant, 12s). User always gets an answer at peak hours.
+  // Primary engine (gpt-oss-120b, 20s) → on timeout/overload retry with the
+  // fast fallback (gpt-oss-20b, 12s). User always gets an answer at peak hours.
   try {
     return await aiRequest(env, AI_MODEL, messages, temperature, maxTokens, 20000);
   } catch (e) {

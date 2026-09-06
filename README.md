@@ -8,7 +8,7 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Analysis** | Full stock/crypto analysis — sector, risk, trend, forecast & verdict. Groq Llama 3.3 70B with an instant fallback engine for peak hours |
+| 🤖 **AI Analysis** | Full stock/crypto analysis — sector, risk, trend, forecast & verdict. Groq gpt-oss-120b with an instant fallback engine for peak hours |
 | 👔 **Analyst Ratings** | Wall-Street buy/hold/sell consensus (Finnhub, with a Yahoo fallback for foreign/TSX listings). Says plainly when there's no coverage |
 | 🏦 **ETF / Fund Aware** | ETFs and index/commodity funds (SPY, QQQ, GLD…) are analyzed as diversified baskets, not single companies — no misleading labels |
 | 🌐 **Ticker Highlighting** | On Yahoo Finance, Google Finance, MarketWatch, CNBC, Reuters, Bloomberg & Seeking Alpha, tickers in articles are highlighted — hover for a live price card, click for full analysis |
@@ -64,7 +64,7 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 
 - **Chrome Extension** — Manifest V3, vanilla JS, zero dependencies, strict CSP
 - **Cloudflare Workers** — free serverless backend with edge caching
-- **Groq API** — Llama 3.3 70B primary + Llama 3.1 8B-instant fallback (free tier)
+- **Groq API** — gpt-oss-120b primary + gpt-oss-20b fallback (free tier)
 - **Finnhub** — real-time quotes, company profiles, analyst recommendations, news
 - **Yahoo Finance** — price history, fallback prices, FX rates, symbol search, foreign/TSX analyst data
 - **ApeWisdom** — Reddit/social mention data for the buzz signal (keyless)
