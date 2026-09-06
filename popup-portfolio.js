@@ -191,6 +191,64 @@ function clearPortfolio() {
   toast(L('✓ Портфель очищено', '✓ Portfolio cleared', '✓ Portefeuille vidé'));
 }
 
+// ── AI portfolio review ───────────────────────────────────────────────────────
+// Sends the holdings (weight + P&L, computed & currency-normalized like the list)
+// to the LIVE /chat endpoint for a holistic AI take — diversification, sector/geo
+// concentration, biggest risk, suggestions. No new endpoint, no worker deploy.
+// Cached per snapshot (tickers+shares+lang) for 30 min so it won't re-hit the AI.
+var pfReviewCache = {};
+function pfSnapshotHash() {
+  return portfolio.map(function (p) { return p.ticker + ':' + posShares(p); }).join(',') + '|' + lang;
+}
+function openPortfolioReview() {
+  if (!portfolio.length) { toast(L('Портфель порожній', 'Portfolio is empty', 'Portefeuille vide')); return; }
+  document.getElementById('pf-review-overlay').style.display = 'flex';
+  var body = document.getElementById('pf-review-body');
+  var hash = pfSnapshotHash();
+  var cached = pfReviewCache[hash];
+  if (cached && Date.now() - cached.at < 30 * 60 * 1000) { body.innerHTML = renderChatText(cached.reply); return; }
+  body.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:11px">' + L('AI аналізує портфель…', 'AI is reviewing your portfolio…', 'Analyse du portefeuille…') + '</div>';
+
+  var curSet = {}; portfolio.forEach(function (p) { curSet[(p.cur || 'USD').toUpperCase()] = 1; });
+  loadRates(Object.keys(curSet), function (rates) {
+    var toUSD = function (amt, cur) { return amt / (rates[(cur || 'USD').toUpperCase()] || 1); };
+    var data = [], pending = portfolio.length, totalCur = 0;
+    portfolio.forEach(function (p) {
+      loadLivePrice(p.sym || p.ticker, function (d) {
+        var invested = toUSD(posInvested(p), p.cur);
+        var current = (d && d.c) ? toUSD(posShares(p) * d.c, p.cur) : 0;
+        totalCur += current;
+        data.push({ t: p.ticker, invested: invested, current: current });
+        if (--pending === 0) build();
+      });
+    });
+    function build() {
+      var lines = data.map(function (x) {
+        var w = totalCur > 0 ? (x.current / totalCur * 100) : 0;
+        var pl = x.invested > 0 ? ((x.current - x.invested) / x.invested * 100) : 0;
+        return x.t + ': ' + w.toFixed(1) + '% of portfolio, P&L ' + (pl >= 0 ? '+' : '') + pl.toFixed(1) + '%';
+      });
+      var prompt = L(
+        'Ось мій портфель акцій (частка портфеля і P&L). Дай стислий огляд (4-6 речень): диверсифікація, концентрація по секторах/регіонах, головний ризик і 1-2 практичні поради. Конкретно, без води. Портфель:\n',
+        'Here is my stock portfolio (weight of portfolio and P&L). Give a concise review (4-6 sentences): diversification, sector/geographic concentration, the single biggest risk, and 1-2 practical suggestions. Be specific, no fluff. Portfolio:\n',
+        'Voici mon portefeuille (poids et P&L). Donne un bilan concis (4-6 phrases) : diversification, concentration sectorielle/géographique, le risque principal et 1-2 conseils pratiques. Sois précis. Portefeuille :\n'
+      ) + lines.join('\n');
+      fetch(WORKER_URL + '/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], lang: lang, currency: currency, fxRate: fxRate }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (document.getElementById('pf-review-overlay').style.display === 'none') return;
+          if (res && res.reply) { pfReviewCache[hash] = { reply: res.reply, at: Date.now() }; body.innerHTML = renderChatText(res.reply); }
+          else { body.textContent = (res && res.error) || L('Не вдалося отримати огляд', 'Could not get a review', "Échec de l'analyse"); }
+        })
+        .catch(function () { body.textContent = L('Помилка з\'єднання', 'Connection error', 'Erreur de connexion'); });
+    }
+  });
+}
+function closePortfolioReview() { document.getElementById('pf-review-overlay').style.display = 'none'; }
+
 function removePortfolioPosition(idx) {
   portfolio.splice(idx, 1);
   savePortfolio();

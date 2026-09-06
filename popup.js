@@ -166,6 +166,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('pf-import-btn').addEventListener('click', function () { document.getElementById('pf-csv-input').click(); });
     document.getElementById('pf-csv-input').addEventListener('change', handlePortfolioCSVFile);
     document.getElementById('pf-clear-btn').addEventListener('click', clearPortfolio);
+    document.getElementById('pf-review-btn').addEventListener('click', openPortfolioReview);
+    document.getElementById('pf-review-close').addEventListener('click', closePortfolioReview);
+    document.getElementById('pf-review-overlay').addEventListener('click', function (e) { if (e.target.id === 'pf-review-overlay') closePortfolioReview(); });
     document.getElementById('pf-ticker').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-shares').focus(); });
     document.getElementById('pf-shares').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('pf-buyprice').focus(); });
     document.getElementById('pf-buyprice').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPortfolioPosition(); });
@@ -308,6 +311,8 @@ var I18N_LABELS = [
   ['btn-conv-list', 'Діалоги', 'Conversations', 'title'],
   ['lbl-import-csv', 'Імпорт CSV з брокера', 'Import broker CSV'],
   ['lbl-pf-clear', 'Очистити', 'Clear'],
+  ['lbl-pf-review', 'AI-огляд портфеля', 'AI portfolio review'],
+  ['lbl-pf-review-title', '🧠 AI-огляд портфеля', '🧠 AI portfolio review'],
   ['share-btn', '↗ Поділитись', '↗ Share'],
   ['lbl-share-title', 'Поділитися аналізом', 'Share your analysis'],
   ['lbl-share-copy', 'Копіювати', 'Copy'],
@@ -344,6 +349,7 @@ var FR_LABELS = {
   'chat-input': 'Posez une question sur TSLA, le marché...',
   'btn-new-chat': 'Nouveau chat', 'btn-conv-list': 'Conversations',
   'lbl-import-csv': 'Importer CSV du courtier', 'lbl-pf-clear': 'Vider',
+  'lbl-pf-review': 'Bilan IA du portefeuille', 'lbl-pf-review-title': '🧠 Bilan IA du portefeuille',
   'lbl-compare-title': 'Comparer', 'lbl-cmp-go': 'Comparer', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage

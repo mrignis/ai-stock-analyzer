@@ -1,0 +1,25 @@
+name: deploy worker
+
+# Auto-deploys the Cloudflare Worker on every push to main (and on demand), so a
+# worker change goes live WITHOUT a local `wrangler login` — the local OAuth token
+# expires; a GitHub Actions secret does not. One-time setup: add a repo secret
+# CLOUDFLARE_API_TOKEN (Cloudflare dashboard → My Profile → API Tokens → "Edit
+# Cloudflare Workers" template). Existing worker secrets (GROQ_KEY, FINNHUB_KEY,
+# OLLAMA_API_KEY) live on Cloudflare and are preserved across deploys.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Deploy to Cloudflare Workers
+        run: npx --yes wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
