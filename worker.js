@@ -238,6 +238,21 @@ export default {
       if (url.pathname === '/fx' && request.method === 'GET') {
         return await handleFx(request);
       }
+      // Upcoming events (earnings/dividends) — slow-moving, cache 1h
+      if (url.pathname === '/calendar' && request.method === 'GET') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString());
+        const hit = await cache.match(cacheKey);
+        if (hit) return hit;
+        const res = await handleCalendar(request);
+        if (res.status === 200) {
+          const cacheable = new Response(res.body, res);
+          cacheable.headers.set('Cache-Control', 'public, max-age=3600');
+          ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+          return cacheable;
+        }
+        return res;
+      }
       // Reddit "buzz" signal — slow-moving trending board, cache 10 min
       if (url.pathname === '/social' && request.method === 'GET') {
         const cache = caches.default;
@@ -548,6 +563,37 @@ async function yahooAnalysts(symbol) {
   return null;
 }
 
+// Upcoming events — next earnings date (+ EPS estimate), dividend yield and
+// ex-dividend date. Same crumb flow; free. Retention driver: "reports in 3 days".
+// Returns { earningsDate, epsEstimate, exDividendDate, dividendYield } (unix secs;
+// yield as a fraction) or null (funds/crypto/foreign with no coverage).
+async function yahooCalendar(symbol) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cr = await getYahooCrumb(attempt === 1);
+    if (!cr) return null;
+    try {
+      const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
+        `?modules=calendarEvents,summaryDetail&crumb=${encodeURIComponent(cr.crumb)}`;
+      const res = await fetchT(url, { headers: { 'User-Agent': YH_UA, 'Cookie': cr.cookie } }, 5000);
+      if (res.status === 401) { yahooCrumb = null; continue; }
+      if (!res.ok) return null;
+      const data = await res.json();
+      const r = data?.quoteSummary?.result?.[0];
+      if (!r) return null;
+      const ce = r.calendarEvents || {}, sd = r.summaryDetail || {};
+      const ed = ce.earnings && ce.earnings.earningsDate;
+      const out = {
+        earningsDate: (ed && ed[0] && ed[0].raw) ? ed[0].raw : null,
+        epsEstimate: (ce.earnings && ce.earnings.earningsAverage && ce.earnings.earningsAverage.raw != null) ? ce.earnings.earningsAverage.raw : null,
+        exDividendDate: (sd.exDividendDate && sd.exDividendDate.raw) || (ce.exDividendDate && ce.exDividendDate.raw) || null,
+        dividendYield: (sd.dividendYield && sd.dividendYield.raw != null) ? sd.dividendYield.raw : null,
+      };
+      return (out.earningsDate || out.exDividendDate || out.dividendYield != null) ? out : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
 // Company-name → ticker via Yahoo's symbol registry: "ferrari" → RACE,
 // "servicenow" → NOW. Noise queries return empty — safe to call with raw text.
 // Hybrid resolver (team vote, fixes "intell"→BOTZ): exact/prefix match gives
@@ -720,6 +766,16 @@ async function handlePrice(request, env) {
   }
 
   return json(finnhubData ? { ...finnhubData, cur: 'USD' } : {}); // whatever Finnhub gave (may be empty)
+}
+
+// ── /calendar?ticker=TSLA ─────────────────────────────────────────────────────
+async function handleCalendar(request) {
+  const parsed = parseTicker(request);
+  if (!parsed) return json({ error: 'Missing ticker' }, 400);
+  const { t, isCrypto } = parsed;
+  if (isCrypto) return json({}); // crypto has no earnings/dividends
+  const cal = await yahooCalendar(t);
+  return json(cal || {});
 }
 
 // ── /social?ticker=TSLA ───────────────────────────────────────────────────────

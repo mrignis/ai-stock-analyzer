@@ -109,6 +109,9 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
 .social-row .social-mom{font-weight:600}
 .social-row .social-quiet{color:var(--dim)}
 .social-row.is-hidden{display:none}
+#r-calendar .ev-earn{color:var(--text);font-weight:600}
+#r-calendar .ev-soon{color:var(--yellow);font-weight:600}
+#r-calendar .ev-div{color:var(--green)}
 .block{background:var(--surface2);border-radius:var(--r);padding:10px 12px;margin-bottom:8px}
 .block-title{font-family:var(--mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
 .block-text{font-size:12px;line-height:1.6;color:var(--text)}
@@ -357,6 +360,7 @@ input[type=text]::placeholder{text-transform:none;letter-spacing:0;font-size:12p
       <div class="stat"><div class="stat-lbl" id="lbl-for">Для кого</div><div class="stat-val" id="r-for"></div></div>
     </div>
     <div id="r-analysts" style="display:none;margin-bottom:10px"></div>
+    <div id="r-calendar" class="social-row is-hidden"></div>
     <div id="r-social" class="social-row is-hidden"></div>
     <div class="chart-wrap">
       <div class="chart-title"><span id="lbl-chart">Тренд (30д)</span><span id="chart-change"></span></div>

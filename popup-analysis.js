@@ -466,7 +466,57 @@ function finish(ticker, data, cachedAt) {
   renderResult(ticker, data, cachedAt);
   fetchRealChart(ticker, data.color);
   fetchSocialBuzz(ticker);
+  fetchCalendar(ticker);
   syncWatchlistMeta(ticker, data, true); // heal this ticker's watchlist tile (sector/verdict) if listed
+}
+
+// Upcoming events (next earnings + dividend) — a retention driver ("reports in
+// 3 days"). Worker /calendar (Yahoo, cached 1h, no AI). Fail-silent: no events →
+// the row stays hidden. Guarded on currentTicker so a slow reply for an old
+// ticker never paints over a newer analysis.
+function fetchCalendar(ticker) {
+  var reqT = ticker;
+  var el = document.getElementById('r-calendar');
+  if (el) el.classList.add('is-hidden');
+  fetch(WORKER_URL + '/calendar?ticker=' + encodeURIComponent(ticker))
+    .then(function (r) { return r.json(); })
+    .then(function (c) { if (currentTicker === reqT) renderCalendar(c); })
+    .catch(function () {});
+}
+
+function renderCalendar(c) {
+  var el = document.getElementById('r-calendar');
+  if (!el) return;
+  el.classList.add('is-hidden');
+  if (!c || c.error) return;
+  var parts = [];
+  var now = Date.now() / 1000;
+  // Earnings — only when upcoming (and within ~2 months, else it's noise/stale).
+  // All interpolated values are numbers/dates → safe for innerHTML.
+  if (c.earningsDate) {
+    var days = Math.round((c.earningsDate - now) / 86400);
+    if (days >= 0 && days <= 75) {
+      var when = days === 0 ? L('сьогодні', 'today', "aujourd'hui")
+        : days === 1 ? L('завтра', 'tomorrow', 'demain')
+        : L('через ' + days + ' дн', 'in ' + days + 'd', 'dans ' + days + 'j');
+      var cls = days <= 7 ? 'ev-soon' : 'ev-earn'; // imminent → highlighted
+      var eps = (c.epsEstimate != null) ? ' · EPS ' + Number(c.epsEstimate).toFixed(2) : '';
+      parts.push('<span class="' + cls + '">📅 ' + L('Звіт', 'Earnings', 'Résultats') + ' ' + when + eps + '</span>');
+    }
+  }
+  // Dividend — yield + ex-date (localized short date).
+  if (c.dividendYield != null && c.dividendYield > 0) {
+    var yld = (Number(c.dividendYield) * 100).toFixed(2) + '%';
+    var ex = '';
+    if (c.exDividendDate) {
+      var d = new Date(Number(c.exDividendDate) * 1000);
+      if (!isNaN(d.getTime())) ex = ' · ' + L('відс.', 'ex', 'dét.') + ' ' + d.toLocaleDateString(L('uk-UA', 'en-US', 'fr-FR'), { month: 'short', day: 'numeric' });
+    }
+    parts.push('<span class="ev-div">💵 ' + L('Дивіденд', 'Dividend', 'Dividende') + ' ' + yld + ex + '</span>');
+  }
+  if (!parts.length) return;
+  el.innerHTML = parts.join(' <span class="social-sep">·</span> ');
+  el.classList.remove('is-hidden');
 }
 
 // Reddit "buzz" signal (worker /social → ApeWisdom). A bonus social-proof row;
