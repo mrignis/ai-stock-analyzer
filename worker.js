@@ -27,7 +27,11 @@ const CORS = {
 // an answer at peak hours. (Reverted from qwen/Ollama Cloud — qwen3-coder gave
 // thinner prose + cold-start timeouts; the company web_search below still uses
 // OLLAMA_API_KEY independently of the chat/analyze engine.)
-const AI_MODEL = 'llama-3.3-70b-versatile';
+// Groq decommissioned llama-3.3-70b-versatile + llama-3.1-8b-instant (both now
+// "model does not exist / no access"), which took the whole engine down. Migrated
+// to the gpt-oss family — the team already verified openai/gpt-oss-120b on Groq
+// for the LoL coach (~1000 req/day free). Fallback: the smaller 20b variant.
+const AI_MODEL = 'openai/gpt-oss-120b';
 const AI_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const CRYPTO_MAP = {
@@ -48,7 +52,7 @@ const CRYPTO_NAMES = {
   'TRON': 'TRX',
 };
 
-const AI_FALLBACK_MODEL = 'llama-3.1-8b-instant'; // backup engine: simpler but never queued
+const AI_FALLBACK_MODEL = 'openai/gpt-oss-20b'; // backup engine: smaller, rarely queued
 
 // Response language. `lang` from the client is a code (en/ua/fr); the AI is told
 // to answer in that language, and /analyze gets localized enum hints so the
