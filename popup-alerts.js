@@ -18,11 +18,14 @@ chrome.storage.onChanged.addListener(function(changes, area) {
 });
 
 function initAlerts() {
-  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets', 'notificationsEnabled'], function(s) {
+  chrome.storage.local.get(['alertThreshold', 'priceAlerts', 'priceTargets', 'notificationsEnabled', 'digestEnabled', 'digestTime', 'digestHour'], function(s) {
     var threshold = s.alertThreshold || 3;
     document.getElementById('threshold-slider').value = threshold;
     document.getElementById('threshold-value').textContent = threshold + '%';
     setNotifToggle(s.notificationsEnabled !== false); // default ON
+    setDigestToggle(s.digestEnabled === true);        // default OFF — opt-in
+    document.getElementById('digest-time').value = digestTimeValue(s);
+    renderDigestStatus();
     renderTargets(s.priceTargets || []);
     // Instant render from the background snapshot, then refresh with live
     // prices (stale-while-revalidate — same standard as the other tabs)
@@ -64,6 +67,128 @@ function toggleNotifications() {
         ? L('🔔 Сповіщення увімкнено', '🔔 Notifications on', '🔔 Notifications activées')
         : L('🔕 Сповіщення вимкнено', '🔕 Notifications off', '🔕 Notifications désactivées'));
     });
+  });
+}
+
+// ── Daily digest ──────────────────────────────────────────────────────────────
+// Opt-in: one notification per weekday at a time the user types in, with the
+// market, the watchlist's biggest movers and earnings due within a week.
+// background.js does the work; here we own the switch, the time and the preview.
+
+// Stored "HH:MM" for <input type=time>, migrating the pre-2.8 numeric hour.
+function digestTimeValue(s) {
+  if (typeof s.digestTime === 'string' && /^\d{1,2}:\d{2}$/.test(s.digestTime)) {
+    var p = s.digestTime.split(':');
+    return ('0' + p[0]).slice(-2) + ':' + p[1];
+  }
+  if (typeof s.digestHour === 'number') return ('0' + s.digestHour).slice(-2) + ':00';
+  return '09:00';
+}
+
+function setDigestToggle(enabled) {
+  var btn = document.getElementById('digest-toggle');
+  if (!btn) return;
+  btn.textContent = enabled ? L('Увімкнено', 'On', 'Activé') : L('Вимкнено', 'Off', 'Désactivé');
+  btn.style.color = enabled ? 'var(--green)' : 'var(--dim)';
+}
+
+// "When is it actually coming?" — the preview button proves the content, this
+// line proves the schedule. Mirrors background.js's rules exactly (weekdays
+// only, 4h grace window, once a day) so the user can see the next delivery
+// instead of having to trust that an invisible alarm is set.
+function renderDigestStatus() {
+  var el = document.getElementById('digest-status');
+  if (!el) return;
+  chrome.storage.local.get(['digestEnabled', 'digestTime', 'digestHour', 'digestLastDate', 'notificationsEnabled'], function(s) {
+    if (!s.digestEnabled) { el.textContent = ''; return; }
+    if (s.notificationsEnabled === false) {
+      el.textContent = L('🔕 Сповіщення вимкнено — дайджест не прийде.',
+                         '🔕 Notifications are off — the digest will not arrive.',
+                         '🔕 Notifications désactivées — le résumé n’arrivera pas.');
+      return;
+    }
+    if (!watchlist.length) {
+      el.textContent = L('Список порожній — нема про що звітувати.',
+                         'The Watchlist is empty — nothing to report.',
+                         'La Liste est vide — rien à signaler.');
+      return;
+    }
+
+    var hhmm = digestTimeValue(s);
+    var parts = hhmm.split(':');
+    var mins = (+parts[0]) * 60 + (+parts[1]);
+
+    var now = new Date();
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+    var todayKey = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+    var sentToday = s.digestLastDate === todayKey;
+
+    // Walk forward day by day to the next slot that background.js would accept.
+    var d = new Date(now.getTime());
+    var offset = 0;
+    for (var i = 0; i < 8; i++) {
+      var weekend = d.getDay() === 0 || d.getDay() === 6;
+      var key = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+      var missed = offset === 0 && (nowMin >= mins + 4 * 60 || (sentToday && key === todayKey));
+      if (!weekend && !missed && !(offset === 0 && sentToday)) break;
+      d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); offset++;
+    }
+
+    var dayWord;
+    if (offset === 0) dayWord = nowMin >= mins ? L('сьогодні', 'today', "aujourd'hui") : L('сьогодні', 'today', "aujourd'hui");
+    else if (offset === 1) dayWord = L('завтра', 'tomorrow', 'demain');
+    else {
+      var days = { ua: ['неділю','понеділок','вівторок','середу','четвер','п’ятницю','суботу'],
+                   en: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+                   fr: ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'] };
+      var list = days[lang] || days.en;
+      dayWord = L('у ' + list[d.getDay()], 'on ' + list[d.getDay()], list[d.getDay()]);
+    }
+
+    var line = L('📬 Наступний: ' + dayWord + ' о ' + hhmm,
+                 '📬 Next: ' + dayWord + ' at ' + hhmm,
+                 '📬 Prochain : ' + dayWord + ' à ' + hhmm);
+    if (sentToday) {
+      line += L(' · сьогоднішній уже надіслано', ' · today’s was already sent', ' · celui d’aujourd’hui a déjà été envoyé');
+    }
+    el.textContent = line;
+  });
+}
+
+function toggleDigest() {
+  chrome.storage.local.get(['digestEnabled'], function(s) {
+    var enabled = !s.digestEnabled;
+    chrome.storage.local.set({ digestEnabled: enabled }, function() {
+      setDigestToggle(enabled);
+      renderDigestStatus();
+      if (!enabled) { toast(L('Дайджест вимкнено', 'Digest off', 'Résumé désactivé')); return; }
+      var hhmm = document.getElementById('digest-time').value || '09:00';
+      toast(L('☀️ Дайджест о ' + hhmm, '☀️ Digest at ' + hhmm, '☀️ Résumé à ' + hhmm));
+      if (!watchlist.length) {
+        toast(L('Спершу додай акції у Список', 'Add stocks to the Watchlist first', "Ajoutez d'abord des actions à la Liste"));
+      }
+    });
+  });
+}
+
+function saveDigestTime() {
+  var hhmm = document.getElementById('digest-time').value;
+  if (!/^\d{1,2}:\d{2}$/.test(hhmm || '')) return; // the picker was cleared — keep the stored value
+  // Clear today's "already sent" stamp: moving the time to a later slot should
+  // let today's digest still arrive instead of being swallowed by the guard.
+  chrome.storage.local.set({ digestTime: hhmm, digestLastDate: '' }, function() {
+    renderDigestStatus();
+    toast(L('☀️ Дайджест о ' + hhmm, '☀️ Digest at ' + hhmm, '☀️ Résumé à ' + hhmm));
+  });
+}
+
+function previewDigest() {
+  if (!watchlist.length) {
+    toast(L('Спершу додай акції у Список', 'Add stocks to the Watchlist first', "Ajoutez d'abord des actions à la Liste"));
+    return;
+  }
+  chrome.runtime.sendMessage({ action: 'digestNow' }, function() {
+    toast(L('☀️ Готую дайджест…', '☀️ Building digest…', '☀️ Préparation du résumé…'));
   });
 }
 

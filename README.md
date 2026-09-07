@@ -26,6 +26,7 @@ AI-powered Chrome extension for real-time stock & crypto analysis. **Completely 
 | 📋 **Watchlist** | Track favorites with live prices + AI verdicts; ⭐ pick which show on the home screen |
 | 📰 **News Feed** | Latest company news per ticker |
 | 🔔 **Price Alerts** | Background %-change notifications with the full watchlist picture in one toast |
+| ☀️ **Daily Digest** | One notification a day, at a time you set: where the market stands, your biggest watchlist movers and earnings due within the week. Weekdays only, opt-in |
 | 🌍 **Trilingual** | Full 🇺🇦 Ukrainian, 🇬🇧 English and 🇫🇷 French — everything (incl. stored verdicts/sectors) re-localizes on switch |
 | 🌙☀️ **Dark / Light Theme** | Switchable themes with a warm cream light mode |
 | 📌 **Pin Window** | Open as a floating window that stays open while you work |

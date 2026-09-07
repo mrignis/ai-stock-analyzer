@@ -194,6 +194,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.getElementById('btn-add-target').addEventListener('click', addPriceTarget);
     document.getElementById('notif-toggle').addEventListener('click', toggleNotifications);
+    document.getElementById('digest-toggle').addEventListener('click', toggleDigest);
+    document.getElementById('digest-time').addEventListener('change', saveDigestTime);
+    document.getElementById('btn-digest-preview').addEventListener('click', previewDigest);
     document.getElementById('target-price').addEventListener('keydown', function(e) { if (e.key === 'Enter') addPriceTarget(); });
     document.getElementById('btn-check-now').addEventListener('click', function() {
       chrome.runtime.sendMessage({ action: 'checkNow' }, function() {
@@ -288,6 +291,10 @@ var I18N_LABELS = [
   ['lbl-notif', '🔔 Сповіщення', '🔔 Notifications'],
   ['alerts-info', 'Отримуй сповіщення коли акції зі Списку змінюються більше ніж на заданий %.', 'Get notified when Watchlist stocks change more than the set %.'],
   ['threshold-label', 'Поріг сповіщення (% зміни):', 'Alert threshold (% change):'],
+  ['lbl-digest', '☀️ Щоденний дайджест', '☀️ Daily digest'],
+  ['digest-info', 'Раз на день у будні: стан ринку, лідери руху зі Списку та найближчі звіти.', 'Once every weekday: market snapshot, your Watchlist movers and upcoming earnings.'],
+  ['digest-time-label', 'Час:', 'Time:'],
+  ['btn-digest-preview', '👁 Показати', '👁 Preview'],
   ['target-label', '🎯 Цінові цілі:', '🎯 Price targets:'],
   ['btn-add-target', '+ Додати ціль', '+ Add target'],
   ['btn-save-threshold', 'Зберегти', 'Save'],
@@ -340,6 +347,9 @@ var FR_LABELS = {
   'lbl-alerts-title': 'Alertes de prix', 'lbl-notif': '🔔 Notifications',
   'alerts-info': 'Recevez une alerte quand une action de la Liste varie de plus du % défini.',
   'threshold-label': "Seuil d'alerte (% de variation) :", 'target-label': '🎯 Objectifs de prix :',
+  'lbl-digest': '☀️ Résumé quotidien',
+  'digest-info': "Une fois par jour ouvré : état du marché, les plus fortes variations de votre Liste et les résultats à venir.",
+  'digest-time-label': 'Heure :', 'btn-digest-preview': '👁 Aperçu',
   'btn-add-target': '+ Ajouter un objectif', 'btn-save-threshold': 'Enregistrer', 'btn-check-now': '↻ Vérifier',
   'lbl-chat-welcome': 'Bonjour ! Posez-moi une question sur une action ou le marché.',
   'news-search-btn': 'Recherche', 'lbl-news-empty': 'Saisissez un symbole ou choisissez dans la liste',
