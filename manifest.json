@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Stock Analyzer",
-  "version": "2.8",
+  "version": "2.9",
   "description": "Your instant AI analyst for stocks & crypto — verdict, risks, forecast, analyst ratings, portfolio & alerts in seconds.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
