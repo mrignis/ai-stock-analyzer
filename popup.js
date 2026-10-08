@@ -363,7 +363,7 @@ var FR_LABELS = {
   'lbl-compare-title': 'Comparer', 'lbl-cmp-go': 'Comparer', 'lbl-share-title': "Partager l'analyse",
   'lbl-share-copy': 'Copier', 'lbl-share-dl': 'Télécharger', 'share-btn': '↗ Partager',
   // Language-neutral (kept identical across locales) — listed for full 48/48 coverage
-  'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...',
+  'wl-tab-wl': 'WL', 'pf-ticker': 'TSLA', 'news-input': 'TSLA, AAPL...', 'cmp-input': 'MSFT',
 };
 
 // 3-language string pick: L(ua, en, fr). `lang` is the global code; fr falls back
