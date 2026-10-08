@@ -692,12 +692,60 @@ async function yahooQuote(symbol) {
 // probe across exchange suffixes is reliable: SAU → SAU.TO ($0.17 CAD). Parallel
 // so the worst case is one timeout, not five. (Pylyp: SAU/GMIN not found.)
 const YAHOO_EXCHANGE_SUFFIXES = ['.TO', '.V', '.L', '.AX', '.NE', '.NS'];
-async function probeForeignExchange(ticker) {
+
+// Which exchange a bare ticker lives on never changes (SAU is SAU.TO forever),
+// but discovering it costs 6 parallel Yahoo calls and Yahoo throttles Cloudflare
+// at busy moments. When it does, the whole chain — Finnhub (US-only), direct
+// Yahoo, the probe — collapses and /analyze answers "ticker not found" for a
+// symbol it resolved correctly minutes earlier. So remember the mapping at the
+// edge and serve it when the live probe can't run. Caches only CONFIRMED hits,
+// so a throttled moment is never what gets remembered.
+const RESOLVE_TTL = 2592000; // 30 days — an exchange listing outlives any cache
+
+function resolveCacheKey(ticker) {
+  return new Request('https://resolve.cache/sym?t=' + encodeURIComponent(ticker));
+}
+
+async function getCachedResolution(ticker) {
+  try {
+    const hit = await caches.default.match(resolveCacheKey(ticker));
+    if (!hit) return null;
+    const d = await hit.json();
+    return d && d.sym ? d : null;
+  } catch (e) { return null; }
+}
+
+function putCachedResolution(ctx, ticker, sym, name) {
+  try {
+    const res = new Response(JSON.stringify({ sym: sym, name: name || null }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + RESOLVE_TTL },
+    });
+    const put = caches.default.put(resolveCacheKey(ticker), res)
+      .catch(e => console.error('resolve cache put failed:', e));
+    // handleAnalyze has a ctx; handlePrice doesn't — there the write is left to
+    // settle on its own rather than blocking the quote.
+    if (ctx && ctx.waitUntil) ctx.waitUntil(put);
+  } catch (e) { /* cache unavailable — resolution still works, just uncached */ }
+}
+
+async function probeForeignExchange(ticker, ctx) {
+  // Known symbol → one quote instead of six, which also takes six-sevenths of
+  // our load off Yahoo and makes the throttling rarer in the first place.
+  const cached = await getCachedResolution(ticker);
+  if (cached) {
+    const q = await yahooQuote(cached.sym);
+    // No quote means Yahoo is throttling us right now. Still hand back the
+    // resolved symbol: /analyze can produce a full analysis without a live
+    // price, which beats a 404 on a ticker we know is valid.
+    return { sym: cached.sym, name: cached.name || (q && q.name) || null, q: q && q.c > 0 ? q : null };
+  }
   const hits = await Promise.all(YAHOO_EXCHANGE_SUFFIXES.map(async suf => {
     const q = await yahooQuote(ticker + suf);
     return q && q.c > 0 ? { sym: ticker + suf, name: q.name, q: q } : null;
   }));
-  return hits.find(Boolean) || null;
+  const found = hits.find(Boolean) || null;
+  if (found) putCachedResolution(ctx, ticker, found.sym, found.name);
+  return found;
 }
 
 // Yahoo symbols for market cards (Finnhub uses BINANCE:BTCUSDT, Yahoo uses BTC-USD)
@@ -898,7 +946,7 @@ async function handleAnalyze(request, env, ctx) {
       // Finnhub blip) AND accepts an already-suffixed foreign ticker (SAU.TO) as
       // typed, instead of the confusing "Did you mean: SAU.TO?" (Pylyp).
       const directYahoo = (isBareTicker || isDottedForeign) ? await yahooQuote(raw) : null;
-      const fx = (isBareTicker && !(directYahoo && directYahoo.c > 0)) ? await probeForeignExchange(raw) : null;
+      const fx = (isBareTicker && !(directYahoo && directYahoo.c > 0)) ? await probeForeignExchange(raw, ctx) : null;
       if (fx) {
         raw = fx.sym; resolvedName = fx.name || null;
       } else if (directYahoo && directYahoo.c > 0) {
