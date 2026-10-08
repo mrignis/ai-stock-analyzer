@@ -161,6 +161,10 @@ function rateLimited(request) {
   return b.count > RATE_LIMIT;
 }
 
+// Origin this Worker is currently answering on, recorded per invocation so
+// cache helpers that run far from the request can build a valid cache key.
+let SELF_ORIGIN = 'https://stock-ai-analyzer.chelb-dev.workers.dev';
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
@@ -168,6 +172,11 @@ export default {
     }
 
     const url = new URL(request.url);
+    // Cache keys must live on an origin this Worker serves, or Cloudflare
+    // rejects the put. Every other cache here keys off `request.url`; the
+    // resolution cache is reached from helpers that have no request, so the
+    // origin is recorded once per invocation for them to reuse.
+    SELF_ORIGIN = url.origin;
 
     // Expensive AI endpoints are rate-limited per IP
     if ((url.pathname === '/analyze' || url.pathname === '/chat') && rateLimited(request)) {
@@ -176,7 +185,18 @@ export default {
 
     try {
       if (url.pathname === '/test' && request.method === 'GET') {
-        return json({ ok: true, time: Date.now(), model: AI_MODEL });
+        // Round-trip the Cache API. Every cache here fails silently by design
+        // (a cache miss must never break a request), which also means a broken
+        // cache looks exactly like a working one from outside — this says which.
+        let cache = false;
+        try {
+          const probe = new Request(SELF_ORIGIN + '/__cachecheck');
+          await caches.default.put(probe, new Response('1', {
+            headers: { 'Cache-Control': 'public, max-age=60' },
+          }));
+          cache = !!(await caches.default.match(probe));
+        } catch (e) { cache = false; }
+        return json({ ok: true, time: Date.now(), model: AI_MODEL, cache: cache });
       }
       // Edge cache for hot GET endpoints: every client sees the SAME price
       // within a 20s window (consistency) and repeat hits answer in ~50ms
@@ -703,7 +723,7 @@ const YAHOO_EXCHANGE_SUFFIXES = ['.TO', '.V', '.L', '.AX', '.NE', '.NS'];
 const RESOLVE_TTL = 2592000; // 30 days — an exchange listing outlives any cache
 
 function resolveCacheKey(ticker) {
-  return new Request('https://resolve.cache/sym?t=' + encodeURIComponent(ticker));
+  return new Request(SELF_ORIGIN + '/__resolve?t=' + encodeURIComponent(ticker));
 }
 
 async function getCachedResolution(ticker) {
