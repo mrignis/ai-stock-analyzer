@@ -396,7 +396,7 @@ function applyLang() {
   }
   // Re-render conv list if visible
   if (convListVisible) renderConvList();
-  document.getElementById('settings-version').textContent = 'AI Stock Analyzer v' + chrome.runtime.getManifest().version + ' · Groq Llama 3.3 · Finnhub';
+  document.getElementById('settings-version').textContent = 'AI Stock Analyzer v' + chrome.runtime.getManifest().version + ' · Groq gpt-oss · Finnhub';
 
   // Theme labels depend on BOTH theme and language
   var lblTheme = document.getElementById('lbl-theme');
