@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "AI Stock Analyzer — Never Buy a Ticker You Don't Understand",
+  "name": "AI Stock Analyzer — Tickers & Portfolio",
   "short_name": "AI Stocks",
   "version": "2.9",
   "description": "Instant AI analysis of any stock or crypto — live prices, verdict, risks, analyst ratings, portfolio & alerts in seconds.",
