@@ -1,9 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Stock Analyzer — Tickers & Portfolio",
-  "short_name": "AI Stocks",
+  "name": "Stock Analyzer",
   "version": "2.9",
-  "description": "Instant AI analysis of any stock or crypto — live prices, verdict, risks, analyst ratings, portfolio & alerts in seconds.",
+  "description": "Instant AI analysis of any stock ticker or crypto — live prices, verdict, risks, analyst ratings, portfolio & alerts.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
     "https://stock-ai-analyzer.chelb-dev.workers.dev/*"
