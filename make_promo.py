@@ -63,22 +63,21 @@ def small():
     W, H = 440, 280
     img, d = canvas(W, H, (15, 18, 27), (8, 10, 16))
     sparkline(d, 0, 150, W, 130, (48, 92, 62), 7, 3, fill=(15, 29, 21))
-    d.text((26, 58), "AI Stock", f(42), TEXT); d.text((26, 104), "Analyzer", f(42), TEXT)
+    d.text((26, 58), "Stock", f(42), TEXT); d.text((26, 104), "Analyzer", f(42), TEXT)
     pill(d, (258, 72), "BUY", (9, 14, 9), GREEN, f(20))
-    d.text((26, 172), "Instant AI analysis of any", f(15, False), MUTED)
+    d.text((26, 172), "Instant analysis of any", f(15, False), MUTED)
     d.text((26, 193), "stock or crypto.", f(15, False), MUTED)
-    d.text((26, 242), "Free · No API keys · UA · EN · FR", f(13, False), (112, 120, 138))
     finish(img, W, H, "promo-small-440x280.png")
 
 def marquee():
     W, H = 1400, 560
     img, d = canvas(W, H, (16, 19, 29), (8, 10, 16))
     sparkline(d, 0, 300, W, 260, (42, 80, 56), 3, 3, fill=(13, 26, 19))
-    d.text((78, 128), "AI Stock Analyzer", f(78), TEXT)
-    d.text((80, 236), "Instant AI verdict on any stock or crypto —", f(29, False), (203, 208, 218))
-    d.text((80, 275), "no API keys, no sign-up, completely free.", f(29, False), (203, 208, 218))
+    d.text((78, 128), "Stock Analyzer", f(78), TEXT)
+    d.text((80, 236), "Instant verdict on any stock or crypto —", f(29, False), (203, 208, 218))
+    d.text((80, 275), "no sign-up, completely free.", f(29, False), (203, 208, 218))
     cx = 80
-    for c in ["AI Buy/Hold/Sell", "Analyst ratings", "Portfolio + P&L", "3 languages"]:
+    for c in ["Buy/Hold/Sell", "Analyst ratings", "Portfolio + P&L", "3 languages"]:
         w, _ = pill(d, (cx, 348), c, GREEN, (22, 41, 28), f(22, False), (18, 9)); cx += w + 12
     cxx, cyy, cw, ch = 900, 118, 420, 322
     d.rrect([cxx, cyy, cxx + cw, cyy + ch], 18, fill=CARD, outline=BORDER, width=2)
