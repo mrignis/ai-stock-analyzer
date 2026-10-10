@@ -1,6 +1,6 @@
 # Launch pack — AI Stock Analyzer
 
-Written for the 2.9 release. **Do not post anything until 2.9 is live in the store** —
+Written for the 3.0 release. **Do not post anything until 3.0 is live in the store** —
 the published build is still an early 2.8 and is missing the earnings calendar, the AI
 portfolio review, the daily digest and the French notifications. A launch that sends
 people to the old build spends the one first impression you get.

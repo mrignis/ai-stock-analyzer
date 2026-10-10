@@ -1,4 +1,4 @@
-# Chrome Web Store — submission pack (AI Stock Analyzer v2.9)
+# Chrome Web Store — submission pack (Stock Analyzer v3.0)
 
 Paste-ready text for the CWS Developer Dashboard. Store form is in **English**.
 Not shipped in the extension (build-zip.ps1 packs an explicit runtime allowlist).

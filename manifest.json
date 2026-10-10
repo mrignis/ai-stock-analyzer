@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stock Analyzer",
-  "version": "2.9",
+  "version": "3.0",
   "description": "Instant AI analysis of any stock ticker or crypto — live prices, verdict, risks, analyst ratings, portfolio & alerts.",
   "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [

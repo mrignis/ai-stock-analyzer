@@ -2,7 +2,7 @@
 
 AI-powered Chrome extension for real-time stock & crypto analysis. **Completely free — no setup, no API keys.**
 
-![Version](https://img.shields.io/badge/version-2.9-green) ![License](https://img.shields.io/badge/license-MIT-blue) [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-available-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/gmildjlnkoljdenbocapnkpllgkdombk)
+![Version](https://img.shields.io/badge/version-3.0-green) ![License](https://img.shields.io/badge/license-MIT-blue) [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-available-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/gmildjlnkoljdenbocapnkpllgkdombk)
 
 ## ✨ Features
 
